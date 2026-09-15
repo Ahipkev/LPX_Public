@@ -1,7 +1,8 @@
 const MAX_MESSAGE_CHARS = 5000;
 const MAX_TURNS = 50;
-const MAX_REQUEST_CHARS = 120000;
+const MAX_REQUEST_CHARS = 220000;
 const MAX_BASIC_CHARS = 2000;
+const SOURCE_LIMITS = { track_list: 20000, lyrics: 100000, other_material: 50000 };
 
 const GUIDE_INSTRUCTIONS = `You are the LPX Guide, a thoughtful creative conversation for musicians making an LPX: an open, artist-owned publishing format for albums. Your work is to understand the record, never to complete an intake process.
 
@@ -13,12 +14,13 @@ Six areas matter in the background: who they are; what they want to say; visual 
 
 Do not pitch an LPX vision early. Only after enough real context exists may you say “I think I know what this record wants to be.” Then describe a specific experience: entry, what is encountered while music plays, how imagery/words/material participate, progression across the record, restraint, and ending. Ask what feels right and wrong. If rejected, get curious again; do not defend it.
 
-The named experience vocabulary can be useful internally as possibilities, never as templates or a required choice. Multiple modes may combine. Future lyric analysis must treat labels such as verse, chorus, bridge, intro, outro, hook, and refrain as structural metadata, never motifs.
+The named experience vocabulary can be useful internally as possibilities, never as templates or a required choice. Multiple modes may combine. If optional source material is supplied, quietly read it as working context. Do not dump a summary, list themes, announce an analysis, or turn the material into a report. Let one specific, meaningful observation make your next question more attentive. With track names and lyrics, notice possible sequencing, emotional movement, recurring imagery whose meaning changes, shifts in perspective, or opening/closing relationships only as hypotheses. Future lyric analysis must treat labels such as verse, chorus, bridge, intro, outro, hook, and refrain as structural metadata, never motifs. Ignore those labels when interpreting language and never treat their recurrence as meaningful.
 
 For the first reply, use the factual Basics supplied to notice one concrete detail and open a thoughtful thread. Do not recite the Basics, say only “thanks,” or ask them to repeat anything already supplied. Keep replies warm, concise, and musician-facing. Aim for 600–900 output tokens at most, and ordinarily much less.`;
 
 function json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=UTF-8', 'Cache-Control': 'no-store' } }); }
 function text(value, limit) { return typeof value === 'string' && value.length <= limit ? value.trim() : null; }
+function optionalText(value, limit) { if (value === undefined || value === null || value === '') return { valid: true, value: '' }; if (typeof value !== 'string' || value.length > limit) return { valid: false, value: '' }; return { valid: true, value: value.trim() }; }
 function getOutputText(output) {
   if (!Array.isArray(output)) return '';
   return output.flatMap(item => item?.type === 'message' && Array.isArray(item.content) ? item.content : []).filter(part => part?.type === 'output_text' && typeof part.text === 'string').map(part => part.text).join('\n').trim();
@@ -43,14 +45,22 @@ export async function onRequest(context) {
     if (!message || !['user', 'assistant'].includes(message.role) || !text(message.text, MAX_MESSAGE_CHARS)) return json({ error: 'A conversation message is missing or too long. Artist messages can be up to 5,000 characters.' }, 400);
     history.push({ role: message.role, content: message.text.trim() });
   }
+  const source = data.source && typeof data.source === 'object' ? data.source : {};
+  const sourceMaterial = {};
+  for (const [key, limit] of Object.entries(SOURCE_LIMITS)) {
+    const result = optionalText(source[key], limit);
+    if (!result.valid) return json({ error: `${key === 'track_list' ? 'Track list' : key === 'other_material' ? 'Other material' : 'Lyrics'} is too large for this prototype. Please reduce it and try again.` }, 413);
+    sourceMaterial[key] = result.value;
+  }
   if (!context.env.OPENAI_API_KEY) return json({ error: 'The Guide is not configured yet. Please try again after the site administrator adds its server-side API key.' }, 503);
   const basicsContext = `Artist Basics (already known; do not repeat these back as a list):\nWhat they are: ${basics.identity.trim()}\nName: ${basics.name.trim()}\nMusic: ${basics.music.trim()}\nPeople involved: ${(text(basics.people, MAX_BASIC_CHARS) || 'Not provided')}\nRoles: ${(text(basics.roles, MAX_BASIC_CHARS) || 'Not provided')}\nRecord: ${basics.record.trim()}\nRecord status: ${basics.stage.trim()}`;
+  const sourceContext = Object.entries(sourceMaterial).filter(([, value]) => value).map(([key, value]) => `--- ${key === 'track_list' ? 'Track list' : key === 'other_material' ? 'Other written material' : 'Lyrics'} ---\n${value}`).join('\n\n');
   const input = history.length ? history : [{ role: 'user', content: `${basicsContext}\n\nBegin the real conversation.` }];
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 45000);
   let upstream;
   try {
-    upstream = await fetch('https://api.openai.com/v1/responses', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.env.OPENAI_API_KEY}` }, body: JSON.stringify({ model: 'gpt-5.6-terra', store: false, reasoning: { effort: 'medium' }, max_output_tokens: 900, instructions: `${GUIDE_INSTRUCTIONS}\n\n${basicsContext}`, input }) });
+    upstream = await fetch('https://api.openai.com/v1/responses', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.env.OPENAI_API_KEY}` }, body: JSON.stringify({ model: 'gpt-5.6-terra', store: false, reasoning: { effort: 'medium' }, max_output_tokens: 900, instructions: `${GUIDE_INSTRUCTIONS}\n\n${basicsContext}${sourceContext ? `\n\nOptional source material for this active session:\n${sourceContext}` : ''}`, input }) });
   } catch { return json({ error: 'The Guide took too long to respond. Please try again.' }, 504); }
   finally { clearTimeout(timeout); }
   if (!upstream.ok) {

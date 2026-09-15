@@ -3,6 +3,7 @@
 .guide-width { width: min(calc(100% - 96px), 980px); margin-inline: auto; }
 .guide-intro { padding-block: clamp(70px, 9vw, 125px); }
 .guide-intro h1, .conversation h1 { margin-bottom: 25px; font-size: clamp(32px, 4.3vw, 58px); letter-spacing: .11em; }
+.guide-intro h2 { margin: 0 0 20px; font-size: clamp(23px, 2.6vw, 34px); letter-spacing: .09em; }
 .guide-lead { max-width: 650px; margin-bottom: 58px; font-size: clamp(18px, 1.6vw, 22px); color: var(--copy); }
 .guide-intro fieldset { margin: 0; padding: 0; border: 0; }
 .guide-intro > form > fieldset > legend { margin-bottom: 24px; font: 500 13px/1.5 "Montserrat", sans-serif; letter-spacing: .16em; color: var(--gold); }
@@ -18,7 +19,20 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--gold); ou
 .record-stage > div { display: flex; flex-wrap: wrap; gap: 10px; }
 .record-stage label { display: inline-flex; align-items: center; min-height: 44px; gap: 6px; padding: 8px 12px; border: 1px solid #66583e; color: var(--copy); font: 500 10px/1.5 "Montserrat", sans-serif; letter-spacing: .1em; cursor: pointer; }
 .record-stage input { accent-color: var(--gold); }
-.guide-intro .button { margin-top: 32px; }
+.source-material { margin-top: 56px; padding-top: 48px; border-top: 1px solid var(--line); }
+.source-material .eyebrow { margin-bottom: 16px; }
+.source-material > p:not(.eyebrow):not(.source-note) { max-width: 700px; }
+.source-fields { margin-top: 34px; border-top: 1px solid var(--line); }
+.source-fields > label { display: grid; grid-template-columns: minmax(220px, .75fr) minmax(0, 1.25fr); gap: 32px; align-items: start; padding: 24px 0; border-bottom: 1px solid var(--line); font: 500 11px/1.5 "Montserrat", sans-serif; letter-spacing: .12em; color: var(--gold); }
+.source-fields textarea { width: 100%; margin-top: -10px; border: 0; border-bottom: 1px solid #7b6a4c; border-radius: 0; background: rgba(0,0,0,.27); color: var(--copy); font: 400 16px/1.65 "Manrope", sans-serif; padding: 10px 12px; resize: vertical; }
+.local-import { display: grid; grid-template-columns: minmax(220px, .75fr) minmax(0, 1.25fr); gap: 8px 32px; align-items: center; padding: 22px 0; border-bottom: 1px solid var(--line); }
+.local-import label { font: 500 11px/1.5 "Montserrat", sans-serif; letter-spacing: .12em; color: var(--gold); }
+.local-import label span { color: var(--copy-secondary); }
+.local-import input { color: var(--copy); font: 400 14px/1.5 "Manrope", sans-serif; }
+.local-import p { grid-column: 2; margin: 0; color: var(--copy-secondary); font-size: 13px; }
+.source-note { max-width: 720px; margin: 24px 0 0; color: var(--copy-secondary); font-size: 14px; }
+.start-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 24px; margin-top: 32px; }
+.start-actions .button { margin: 0; }
 .form-error, .request-error { color: #f1c7bd; font-size: 14px; }
 .form-error { margin: 18px 0 0; }
 .conversation { padding-block: 64px 88px; }
@@ -31,6 +45,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--gold); ou
 .message { max-width: 780px; padding-block: 0 34px; }
 .message-label { margin: 0 0 10px; color: var(--gold); font: 500 10px/1.5 "Montserrat", sans-serif; letter-spacing: .16em; }
 .message p:last-child { white-space: pre-wrap; margin: 0; }
+.message-body + .message-body { margin-top: 16px !important; }
 .message.artist { margin-left: auto; padding-left: clamp(30px, 12vw, 170px); }
 .message.artist .message-label { color: var(--copy-secondary); }
 .message.guide { padding-right: clamp(20px, 9vw, 125px); }
@@ -44,5 +59,5 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--gold); ou
 .message-controls p { margin: 0; color: var(--copy-secondary); font: 500 9px/1.5 "Montserrat", sans-serif; letter-spacing: .1em; }
 .message-controls .button { min-width: 160px; }
 .button:disabled, .text-button:disabled, textarea:disabled { cursor: not-allowed; opacity: .58; }
-@media (max-width: 700px) { .guide-width { width: calc(100% - 48px); } .guide-intro { padding-block: 52px 72px; } .guide-lead { margin-bottom: 40px; } .basics-fields > label { grid-template-columns: 1fr; gap: 12px; } .conversation { padding-block: 48px 65px; } .message.artist { padding-left: 32px; } .message.guide { padding-right: 20px; } }
+@media (max-width: 700px) { .guide-width { width: calc(100% - 48px); } .guide-intro { padding-block: 52px 72px; } .guide-lead { margin-bottom: 40px; } .basics-fields > label, .source-fields > label, .local-import { grid-template-columns: 1fr; gap: 12px; } .local-import p { grid-column: auto; } .conversation { padding-block: 48px 65px; } .message.artist { padding-left: 32px; } .message.guide { padding-right: 20px; } }
 @media (max-width: 450px) { .guide-width { width: calc(100% - 32px); } .record-stage > div { display: grid; } .record-stage label { width: 100%; } .conversation-header { display: block; } .conversation-header .text-button { margin-top: 16px; } .message-controls .button { width: 100%; } }
