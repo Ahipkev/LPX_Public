@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Start with the record. The LPX Guide is a text conversation for discovering what belongs with your music.">
+  <meta name="theme-color" content="#050606">
+  <title>LPX Guide — Start with the record</title>
+  <link rel="icon" type="image/png" href="images/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400&family=Montserrat:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="guide.css">
+  <script src="guide.js" defer></script>
+</head>
+<body class="guide-page">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <a class="wordmark" href="index.html" aria-label="LPX home">LPX</a>
+    <nav aria-label="Main navigation">
+      <a href="archive.html">ARCHIVE</a>
+      <a href="for-artists.html">FOR ARTISTS</a>
+      <a href="make-an-lpx.html" aria-current="page">MAKE AN LPX</a>
+      <a href="index.html#about">ABOUT</a>
+    </nav>
+  </header>
+  <main id="main" class="guide-width">
+    <section id="basics-stage" class="guide-intro" aria-labelledby="guide-heading">
+      <p class="eyebrow">MAKE AN LPX</p>
+      <h1 id="guide-heading">START WITH THE RECORD.</h1>
+      <p class="guide-lead">A few factual questions give the Guide somewhere useful to begin. The conversation comes next.</p>
+      <form id="basics-form" novalidate>
+        <fieldset>
+          <legend>A FEW BASICS.</legend>
+          <div class="basics-fields">
+            <label>WHAT ARE YOU?<input name="identity" type="text" required maxlength="500" autocomplete="organization" placeholder="Band, solo artist, producer, project, collective… however you describe it."></label>
+            <label>ARTIST OR PROJECT NAME<input name="name" type="text" required maxlength="500" autocomplete="organization" placeholder="The name you work under"></label>
+            <label>HOW WOULD YOU DESCRIBE THE MUSIC?<textarea name="music" required maxlength="2000" rows="4" placeholder="In your own words."></textarea></label>
+            <label>HOW MANY PEOPLE ARE INVOLVED?<input name="people" type="text" maxlength="200" inputmode="numeric" placeholder="One, four, a changing group…"></label>
+            <label>WHO DOES WHAT?<textarea name="roles" maxlength="2000" rows="3" placeholder="Names, instruments, production roles — whatever matters."></textarea></label>
+            <label>WHAT’S THE RECORD CALLED?<input name="record" type="text" required maxlength="500" placeholder="The record title"></label>
+            <fieldset class="record-stage"><legend>WHERE IS THE RECORD RIGHT NOW?</legend><div>
+              <label><input type="radio" name="stage" value="Finished" required> FINISHED</label>
+              <label><input type="radio" name="stage" value="Nearly finished"> NEARLY FINISHED</label>
+              <label><input type="radio" name="stage" value="Still working on it"> STILL WORKING ON IT</label>
+            </div></fieldset>
+          </div>
+        </fieldset>
+        <p id="basics-error" class="form-error" role="alert" hidden></p>
+        <button class="button" type="submit">START CONVERSATION</button>
+      </form>
+    </section>
+
+    <section id="conversation-stage" class="conversation" aria-labelledby="conversation-heading" hidden>
+      <header class="conversation-header">
+        <div><p class="eyebrow">LPX GUIDE</p><h1 id="conversation-heading">THE RECORD IS HERE.</h1></div>
+        <button id="start-over" class="text-button" type="button">START OVER</button>
+      </header>
+      <div id="messages" class="messages" aria-live="polite" aria-relevant="additions" aria-label="LPX Guide conversation"></div>
+      <div id="thinking" class="thinking" hidden aria-live="polite">LPX GUIDE IS THINKING<span aria-hidden="true">…</span></div>
+      <div id="request-error" class="request-error" role="alert" hidden><p></p><button id="retry" class="text-button" type="button">RETRY</button></div>
+      <form id="message-form" class="message-form">
+        <label for="artist-message">ARTIST</label>
+        <textarea id="artist-message" name="message" maxlength="5000" rows="4" placeholder="Say what’s on your mind about the record." disabled></textarea>
+        <div class="message-controls"><p>ENTER TO SEND · SHIFT + ENTER FOR A NEW LINE</p><button id="send" class="button" type="submit" disabled>SEND</button></div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
