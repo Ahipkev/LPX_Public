@@ -1,14 +1,13 @@
 .make-page { background: linear-gradient(to bottom, rgba(5,6,6,.32), rgba(5,6,6,.68) 800px), url("images/lpx_bg.jpg") center top / 100% auto no-repeat; }
 .make-page .site-header { position: relative; }
 .make-width { width: min(calc(100% - 96px), 1250px); margin-inline: auto; }
-.make-hero { padding-block: 75px 100px; min-height: 630px; display: flex; flex-direction: column; justify-content: center; }
+.make-hero { padding-block: 72px 82px; min-height: 570px; display: flex; flex-direction: column; justify-content: center; }
 .eyebrow { margin-bottom: 24px; color: var(--gold); }
 .make-hero h1 { max-width: 900px; font-size: clamp(35px, 5.2vw, 73px); margin-bottom: 38px; }
 .hero-copy { max-width: 650px; }
 .hero-copy p { font-size: clamp(19px, 1.65vw, 24px); line-height: 1.6; }
 .hero-copy p:first-child { font-family: "Montserrat", sans-serif; color: var(--ivory); letter-spacing: .04em; }
-.make-hero .button { margin-top: 20px; align-self: flex-start; }
-.make-section { padding-block: clamp(70px, 8vw, 120px); border-top: 1px solid var(--line); }
+.make-section { padding-block: clamp(62px, 7vw, 100px); border-top: 1px solid var(--line); }
 .make-section h2, .make-close h2 { max-width: 1020px; font-size: clamp(26px, 3.1vw, 43px); letter-spacing: .095em; line-height: 1.3; }
 .make-copy { max-width: 720px; }
 .make-columns { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(260px, .7fr); gap: clamp(45px, 8vw, 145px); }
@@ -45,16 +44,15 @@
 .make-footer > a:last-child { font-size: 13px; }
 @media (max-width: 900px) {
   .make-width { width: calc(100% - 48px); }
-  .make-hero { min-height: 540px; }
+  .make-hero { min-height: 500px; }
   .make-columns { grid-template-columns: 1fr; gap: 35px; }
   .possibility-note, .open-note { max-width: 480px; }
 }
 @media (max-width: 600px) {
-  .make-hero { padding-block: 54px 74px; min-height: 500px; }
+  .make-hero { padding-block: 50px 62px; min-height: 440px; }
   .make-hero h1 { font-size: clamp(31px, 10vw, 42px); }
-  .make-section { padding-block: 65px; }
+  .make-section { padding-block: 58px; }
   .make-section h2, .make-close h2 { font-size: 24px; letter-spacing: .075em; }
-  .make-hero .button { width: min(100%, 290px); }
   .basic-item { grid-template-columns: 1fr; gap: 8px; align-content: center; padding-block: 18px; }
   .understanding-list { grid-template-columns: 1fr; gap: 0; }
   .understanding-list li { padding-block: 18px; }
