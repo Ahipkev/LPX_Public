@@ -1,0 +1,33 @@
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor temporary files
+*~
+*.swp
+*.swo
+.#*
+
+# Local logs
+*.log
+
+# Local environment variables and credentials
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Optional local tooling and caches (not required to build this static site)
+node_modules/
+.cache/
+.parcel-cache/
+.vite/
+.wrangler/
+__pycache__/
+*.py[cod]

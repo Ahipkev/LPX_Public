@@ -1,0 +1,108 @@
+:root {
+  color-scheme: dark;
+  --base: #050606;
+  --ivory: #fff0d3;
+  --copy: #f5f2eb;
+  --copy-secondary: #ded9cf;
+  --gold: #d8b773;
+  --line: rgba(216, 183, 115, .32);
+  font-family: "Manrope", sans-serif;
+  background: var(--base);
+  color: var(--ivory);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; font-family: "Manrope", sans-serif; font-weight: 400; font-size: clamp(17px, 1.45vw, 20px); line-height: 1.85; }
+h1, h2, h3, nav, .wordmark, .button, .eyebrow, .display, .emphasis, .statement { font-family: "Montserrat", sans-serif; }
+.display { font-weight: 400; letter-spacing: .12em; line-height: 1.15; }
+a { color: inherit; text-decoration: none; }
+a:focus-visible { outline: 2px solid var(--gold); outline-offset: 6px; }
+::selection { color: var(--base); background: var(--gold); }
+.skip-link { position: absolute; top: -100px; left: 24px; z-index: 5; padding: 8px 16px; background: var(--ivory); color: var(--base); }
+.skip-link:focus { top: 16px; }
+.site-header { position: absolute; z-index: 2; inset: 0 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 25px clamp(24px, 5vw, 80px); gap: 24px; }
+.wordmark { font-size: 22px; font-weight: 500; letter-spacing: .18em; }
+nav { display: flex; align-items: center; gap: clamp(20px, 3vw, 44px); }
+nav a { display: inline-flex; align-items: center; min-height: 44px; font-size: 11px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: #cec8bb; }
+nav a:hover { color: var(--gold); }
+nav [aria-current="page"] { color: var(--gold); text-decoration: underline; text-underline-offset: 7px; }
+.hero { padding: 130px 24px 115px; text-align: center; background: linear-gradient(to bottom, rgba(8,8,8,0.105), rgba(8,8,8,0.14) 65%, var(--base)), url("images/lpx_bg.jpg") center top / 100% auto no-repeat; }
+.hero-logo { display: block; width: min(850px, 78vw); height: auto; margin: 0 auto 40px; }
+h1 { font-size: clamp(22px, 2.5vw, 36px); font-weight: 400; line-height: 1.15; letter-spacing: .12em; margin: 0 0 17px; text-wrap: balance; }
+.hero p { margin: 0; color: var(--copy); font-size: clamp(16px, 1.5vw, 20px); }
+.hero-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; margin-top: 35px; }
+.button { display: inline-flex; justify-content: center; align-items: center; padding: 14px 27px; min-height: 49px; border: 1px solid #a58b58; color: #e0c58f; font-size: 11px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; transition: background .2s, border-color .2s; }
+.button-secondary { border-color: #66583e; }
+.button:hover { background: rgba(196,166,108,.12); border-color: var(--gold); }
+.copy { width: min(100% - 48px, 780px); margin-inline: auto; }
+p { margin: 0 0 25px; color: var(--copy); }
+p:last-child { margin-bottom: 0; }
+.story { padding: 95px 0 140px; background: linear-gradient(var(--base), rgba(8,8,8,0.56) 30%, rgba(8,8,8,0.532) 72%, var(--base)), url("images/lpx_bg.jpg") center 53% / max(100%, 1200px) auto no-repeat; }
+.passage + .passage { margin-top: 64px; }
+.story-lead { font-size: clamp(24px, 2.5vw, 32px); line-height: 1.65; color: var(--ivory); font-weight: 300; }
+.emphasis { color: var(--ivory); font-weight: 400; letter-spacing: .025em; }
+.story-ending { padding-top: 12px; }
+.section { padding-block: clamp(90px, 10vw, 150px); scroll-margin-top: 35px; }
+h2 { margin: 0 0 42px; font-size: clamp(34px, 4vw, 54px); line-height: 1.22; letter-spacing: .015em; font-weight: 400; text-wrap: balance; }
+.explanation .copy::before, .archive .copy::before { content: ""; display: block; width: 64px; height: 1px; background: var(--gold); margin-bottom: 44px; }
+.statement { font-size: clamp(22px, 2.2vw, 28px); line-height: 1.55; margin-block: 38px; }
+.closing { margin-top: 46px; }
+.artists { padding-block: clamp(110px, 12vw, 180px); background: linear-gradient(var(--base), rgba(8,8,8,0.35) 25%, rgba(8,8,8,0.455) 75%, var(--base)), url("images/lpx_bg.jpg") center bottom / max(100%, 1100px) auto no-repeat; }
+.uppercase-heading { font-size: clamp(26px, 3vw, 40px); font-weight: 400; line-height: 1.15; letter-spacing: .12em; }
+.artists .statement { color: #e2c99a; }
+.archive-space { min-height: clamp(95px, 14vw, 200px); }
+.archive { padding-bottom: 0; }
+.about { padding: 60px 0 85px; scroll-margin-top: 35px; }
+.about .copy { border-top: 1px solid var(--line); padding-top: 46px; }
+.about h2 { font-size: clamp(20px, 2vw, 24px); margin-bottom: 22px; letter-spacing: 0; }
+.about p { font-size: 15px; margin-bottom: 12px; }
+/* Reference composition: compact hero, fine rules, and imagery beside the copy. */
+body { font-size: clamp(16px, 1.25vw, 18px); line-height: 1.65; }
+.site-header { padding-block: 5px; border-bottom: 1px solid var(--line); background: rgba(0,0,0,0.196); }
+.wordmark { font-size: 24px; font-weight: 400; letter-spacing: .3em; color: var(--gold); }
+.hero { padding: 50px 24px 35px; border-bottom: 1px solid var(--line); }
+.hero-logo { width: min(900px, 66vw); margin-bottom: 8px; }
+h1 { font-size: clamp(22px, 3vw, 42px); margin-bottom: 9px; }
+.hero p { color: var(--ivory); font-family: "Montserrat", sans-serif; font-size: clamp(14px, 1.55vw, 21px); font-weight: 400; letter-spacing: .1em; text-transform: uppercase; line-height: 1.5; }
+.hero-actions { gap: 32px; margin-top: 25px; }
+.button { padding: 12px 32px; gap: 25px; min-width: 245px; border-radius: 3px; border-color: #e5bd68; font-size: 12px; }
+.button:first-child { box-shadow: 0 0 18px rgba(218,170,66,.13), inset 0 0 12px rgba(218,170,66,.05); }
+.button::after { content: ""; width: 15px; height: 7px; flex-shrink: 0; background: currentColor; clip-path: polygon(0 42%, 74% 42%, 52% 0, 64% 0, 100% 50%, 64% 100%, 52% 100%, 74% 58%, 0 58%); }
+.button-secondary { border-color: #867047; }
+.story { padding-block: 85px 100px; }
+.passage + .passage { margin-top: 48px; }
+.section { padding-block: clamp(45px, 5vw, 75px); border-top: 1px solid var(--line); }
+h2 { margin-bottom: 24px; font-size: clamp(29px, 3vw, 42px); letter-spacing: .055em; }
+.explanation .copy::before, .archive .copy::before { display: none; }
+.explanation { background: linear-gradient(90deg, rgba(0,0,0,0.616), rgba(0,0,0,0.42) 50%, rgba(0,0,0,0.07)), url("images/lpx_bg.jpg") center 54% / 100% auto no-repeat; }
+.explanation .copy, .artists .copy, .archive .copy, .about .copy { width: min(62%, 780px); margin-left: clamp(24px, 4.7vw, 80px); margin-right: auto; }
+.statement { font-size: clamp(19px, 1.7vw, 24px); line-height: 1.5; margin-block: 24px; }
+.closing { margin-top: 25px; }
+.artists { padding-block: clamp(50px, 5vw, 80px); background-image: linear-gradient(90deg, rgba(0,0,0,0.595), rgba(0,0,0,0.42) 50%, rgba(0,0,0,0.084)), url("images/lpx_bg.jpg"); }
+.uppercase-heading { font-size: clamp(23px, 2.2vw, 31px); letter-spacing: .12em; }
+.archive { padding-bottom: 0; }
+.about { border-top: 1px solid var(--line); padding-block: 40px 55px; }
+.about .copy { border-top: 0; padding-top: 0; }
+@media (max-width: 900px) {
+  .explanation .copy, .artists .copy, .archive .copy, .about .copy { width: calc(100% - 48px); margin-inline: 24px; }
+  .explanation { background-size: auto, auto 1700px; background-position: center, 65% 54%; }
+}
+@media (max-width: 600px) {
+  .site-header { padding: 5px 24px; gap: 16px; }
+  .wordmark { font-size: 19px; }
+  nav { gap: 16px; }
+  nav a { font-size: 9px; }
+  .hero { padding-top: 70px; padding-bottom: 36px; background-size: auto, auto 1050px; }
+  .hero-logo { width: 100%; max-width: 450px; margin-bottom: 18px; }
+  .hero p { max-width: 330px; margin-inline: auto; font-size: 12px; }
+  .hero-actions { flex-direction: column; align-items: center; gap: 12px; margin-top: 29px; }
+  .button { width: min(100%, 290px); min-width: 0; }
+  .story { padding-block: 65px 90px; background-position: center, 62% 55%; }
+  .passage + .passage { margin-top: 46px; }
+  h2 { margin-bottom: 32px; }
+  .artists { background-position: center, 62% bottom; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .button { transition: none; }
+}

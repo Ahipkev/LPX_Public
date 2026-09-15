@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore the LPX Archive. Different records become different places. Enter album experiences by artists, bands, and AI & hybrid artists.">
+  <meta name="theme-color" content="#050606">
+  <title>Archive — LPX</title>
+  <link rel="icon" type="image/png" href="images/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400&family=Montserrat:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="archive.css">
+  <script src="archive.js" defer></script>
+</head>
+<body class="archive-page">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <a class="wordmark" href="index.html" aria-label="LPX home">LPX</a>
+    <nav aria-label="Main navigation">
+      <a href="archive.html" aria-current="page">ARCHIVE</a>
+      <a href="for-artists.html">FOR ARTISTS</a>
+      <a href="index.html#about">ABOUT</a>
+    </nav>
+  </header>
+  <main id="main">
+    <header class="archive-intro gallery-width">
+      <h1>EXPLORE <strong>THE LPX ARCHIVE</strong></h1>
+      <p class="intro-statement"><em>The Imagination Factory.</em></p>
+      <p>These are examples of what different records became.<br>Your record may want to become something completely different.</p>
+    </header>
+    <div class="gallery-width">
+      <section class="filters" aria-label="Filter the Archive" hidden>
+        <fieldset>
+          <legend>BROWSE BY</legend>
+          <div class="filter-options" id="context-filters"></div>
+        </fieldset>
+        <fieldset>
+          <legend>EXPLORE EXPERIENCES</legend>
+          <div class="filter-options" id="experience-filters"></div>
+        </fieldset>
+        <p class="filter-note">Experience tags describe what’s there — not what an LPX has to be.</p>
+        <div class="filter-status">
+          <p id="result-status" role="status" aria-live="polite" aria-atomic="true"></p>
+          <button id="clear-experience" class="text-button" type="button" hidden>CLEAR EXPERIENCE FILTER</button>
+        </div>
+      </section>
+      <div id="archive-results"></div>
+      <noscript><p>Enable JavaScript to explore the Archive and use its filters.</p></noscript>
+    </div>
+    <section class="archive-invitation" aria-labelledby="invitation-heading">
+      <div class="gallery-width">
+        <p class="eyebrow">YOUR RECORD MAY WANT TO BECOME SOMETHING COMPLETELY DIFFERENT.</p>
+        <h2 id="invitation-heading">BUILD THE PLACE<br>YOUR RECORD DESERVES.</h2>
+        <p>Build it your way.<br>Host it where you want.<br>Change it, move it, rebuild it.</p>
+        <p class="emphasis">Your record stays yours.</p>
+        <a class="entry-link" href="for-artists.html">FOR ARTISTS <span aria-hidden="true">→</span></a>
+      </div>
+    </section>
+  </main>
+  <footer class="archive-footer gallery-width">
+    <a class="wordmark" href="index.html" aria-label="LPX home">LPX</a>
+    <a href="index.html#about">LPX isn’t a platform. It’s a format.</a>
+  </footer>
+</body>
+</html>
