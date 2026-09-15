@@ -30,6 +30,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--gold); ou
 .local-import label span { color: var(--copy-secondary); }
 .local-import input { color: var(--copy); font: 400 14px/1.5 "Manrope", sans-serif; }
 .local-import p { grid-column: 2; margin: 0; color: var(--copy-secondary); font-size: 13px; }
+.local-import .text-button { grid-column: 2; justify-self: start; }
 .source-note { max-width: 720px; margin: 24px 0 0; color: var(--copy-secondary); font-size: 14px; }
 .start-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 24px; margin-top: 32px; }
 .start-actions .button { margin: 0; }
@@ -59,5 +60,5 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--gold); ou
 .message-controls p { margin: 0; color: var(--copy-secondary); font: 500 9px/1.5 "Montserrat", sans-serif; letter-spacing: .1em; }
 .message-controls .button { min-width: 160px; }
 .button:disabled, .text-button:disabled, textarea:disabled { cursor: not-allowed; opacity: .58; }
-@media (max-width: 700px) { .guide-width { width: calc(100% - 48px); } .guide-intro { padding-block: 52px 72px; } .guide-lead { margin-bottom: 40px; } .basics-fields > label, .source-fields > label, .local-import { grid-template-columns: 1fr; gap: 12px; } .local-import p { grid-column: auto; } .conversation { padding-block: 48px 65px; } .message.artist { padding-left: 32px; } .message.guide { padding-right: 20px; } }
+@media (max-width: 700px) { .guide-width { width: calc(100% - 48px); } .guide-intro { padding-block: 52px 72px; } .guide-lead { margin-bottom: 40px; } .basics-fields > label, .source-fields > label, .local-import { grid-template-columns: 1fr; gap: 12px; } .local-import p, .local-import .text-button { grid-column: auto; } .conversation { padding-block: 48px 65px; } .message.artist { padding-left: 32px; } .message.guide { padding-right: 20px; } }
 @media (max-width: 450px) { .guide-width { width: calc(100% - 32px); } .record-stage > div { display: grid; } .record-stage label { width: 100%; } .conversation-header { display: block; } .conversation-header .text-button { margin-top: 16px; } .message-controls .button { width: 100%; } }

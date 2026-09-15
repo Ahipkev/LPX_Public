@@ -18,6 +18,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   const lyricsInput = document.querySelector('#lyrics');
   const lyricsFile = document.querySelector('#lyrics-file');
   const fileStatus = document.querySelector('#file-status');
+  const clearLyricsButton = document.querySelector('#clear-lyrics');
   const state = { basics: null, source: null, messages: [], pending: false };
   const SOURCE_LIMITS = { track_list: 20000, lyrics: 100000, other_material: 50000 };
   const MAX_LOCAL_FILE_BYTES = 25 * 1024 * 1024;
@@ -157,31 +158,51 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     } finally { await loadingTask.destroy(); }
     return pages.join('\n\n');
   }
-  async function importLocalFile(file) {
+  async function extractLocalFile(file) {
     const extension = file.name.split('.').pop()?.toLowerCase();
     if (extension === 'doc') throw new Error('Older .doc files aren’t supported yet. Please save it as .docx or PDF.');
     if (!['txt', 'md', 'docx', 'pdf'].includes(extension)) throw new Error('Choose a TXT, MD, DOCX, or PDF file.');
     if (file.size > MAX_LOCAL_FILE_BYTES) throw new Error('That file is too large to read locally. Please choose a file smaller than 25 MB.');
-    fileStatus.textContent = 'Reading this file locally…';
     const extracted = extension === 'docx' ? await extractDocxText(file) : extension === 'pdf' ? await extractPdfText(file) : await readTextFile(file);
     const cleaned = normalizeExtractedText(extracted);
     if (!cleaned) throw new Error(extension === 'pdf' ? 'This PDF doesn’t appear to contain readable text. It may be a scanned document. OCR isn’t supported yet.' : 'That file does not contain readable text. Please paste the text instead.');
     if (extension === 'pdf' && cleaned.replace(/\s/g, '').length < 20) throw new Error('This PDF doesn’t appear to contain readable text. It may be a scanned document. OCR isn’t supported yet.');
     if (cleaned.length > SOURCE_LIMITS.lyrics) throw new Error('The extracted text is too long for the lyrics field. Please shorten it to under 100,000 characters and try again.');
-    lyricsInput.value = cleaned;
-    lyricsInput.focus();
-    fileStatus.textContent = 'Text was read locally into the lyrics field. Review or edit it before starting.';
+    return cleaned;
   }
   lyricsFile.addEventListener('change', async () => {
-    const file = lyricsFile.files?.[0];
-    if (!file) return;
-    try { await importLocalFile(file); }
-    catch (error) { fileStatus.textContent = error.message || 'That file could not be read. Please paste the text instead.'; }
-    finally { lyricsFile.value = ''; }
+    const files = Array.from(lyricsFile.files || []);
+    if (!files.length) return;
+    fileStatus.textContent = `Reading ${files.length} file${files.length === 1 ? '' : 's'} locally…`;
+    const added = [];
+    const issues = [];
+    for (const file of files) {
+      try {
+        const extracted = await extractLocalFile(file);
+        const separator = `--------------------------------------------------\nImported file: ${file.name}\n--------------------------------------------------\n\n`;
+        const addition = `${lyricsInput.value.trim() ? '\n\n' : ''}${separator}${extracted}`;
+        if (lyricsInput.value.length + addition.length > SOURCE_LIMITS.lyrics) {
+          issues.push(`Could not add ${file.name} because it would exceed the Lyrics limit.`);
+          break;
+        }
+        lyricsInput.value += addition;
+        added.push(file.name);
+      } catch (error) { issues.push(`Could not add ${file.name}: ${error.message || 'it could not be read.'}`); }
+    }
+    if (added.length) lyricsInput.focus();
+    const summary = added.length ? `Imported ${added.length} file${added.length === 1 ? '' : 's'} into Lyrics. Added: ${added.join(', ')}.` : '';
+    fileStatus.textContent = [summary, ...issues].filter(Boolean).join(' ');
+    lyricsFile.value = '';
+  });
+  clearLyricsButton.addEventListener('click', () => {
+    if (lyricsInput.value && !window.confirm('Clear all text in Lyrics?')) return;
+    lyricsInput.value = '';
+    fileStatus.textContent = 'Lyrics cleared. You can paste or import new text.';
+    lyricsInput.focus();
   });
   retryButton.addEventListener('click', askGuide);
   startOverButton.addEventListener('click', () => {
     if (!window.confirm('Start over? This clears this browser-only Guide conversation.')) return;
-    state.basics = null; state.source = null; state.messages = []; messages.replaceChildren(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); fileStatus.textContent = 'Read locally into the lyrics field for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
+    state.basics = null; state.source = null; state.messages = []; messages.replaceChildren(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
   });
 })();
