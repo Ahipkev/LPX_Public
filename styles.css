@@ -88,10 +88,10 @@ h2 { margin-bottom: 24px; font-size: clamp(29px, 3vw, 42px); letter-spacing: .05
   .explanation { background-size: auto, auto 1700px; background-position: center, 65% 54%; }
 }
 @media (max-width: 600px) {
-  .site-header { padding: 5px 24px; gap: 16px; }
-  .wordmark { font-size: 19px; }
-  nav { gap: 16px; }
-  nav a { font-size: 9px; }
+  .site-header { padding: 5px 16px; gap: 8px; }
+  .wordmark { font-size: 18px; letter-spacing: .23em; }
+  nav { gap: 10px; }
+  nav a { font-size: 8px; letter-spacing: .13em; }
   .hero { padding-top: 70px; padding-bottom: 36px; background-size: auto, auto 1050px; }
   .hero-logo { width: 100%; max-width: 450px; margin-bottom: 18px; }
   .hero p { max-width: 330px; margin-inline: auto; font-size: 12px; }

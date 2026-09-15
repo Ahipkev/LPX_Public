@@ -1,0 +1,62 @@
+.make-page { background: linear-gradient(to bottom, rgba(5,6,6,.32), rgba(5,6,6,.68) 800px), url("images/lpx_bg.jpg") center top / 100% auto no-repeat; }
+.make-page .site-header { position: relative; }
+.make-width { width: min(calc(100% - 96px), 1250px); margin-inline: auto; }
+.make-hero { padding-block: 75px 100px; min-height: 630px; display: flex; flex-direction: column; justify-content: center; }
+.eyebrow { margin-bottom: 24px; color: var(--gold); }
+.make-hero h1 { max-width: 900px; font-size: clamp(35px, 5.2vw, 73px); margin-bottom: 38px; }
+.hero-copy { max-width: 650px; }
+.hero-copy p { font-size: clamp(19px, 1.65vw, 24px); line-height: 1.6; }
+.hero-copy p:first-child { font-family: "Montserrat", sans-serif; color: var(--ivory); letter-spacing: .04em; }
+.make-hero .button { margin-top: 20px; align-self: flex-start; }
+.make-section { padding-block: clamp(70px, 8vw, 120px); border-top: 1px solid var(--line); }
+.make-section h2, .make-close h2 { max-width: 1020px; font-size: clamp(26px, 3.1vw, 43px); letter-spacing: .095em; line-height: 1.3; }
+.make-copy { max-width: 720px; }
+.make-columns { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(260px, .7fr); gap: clamp(45px, 8vw, 145px); }
+.possibilities-section { background: linear-gradient(90deg, rgba(0,0,0,.58), rgba(0,0,0,.36) 58%, rgba(0,0,0,.1)), url("images/lpx_bg.jpg") center 58% / max(100%, 1150px) auto no-repeat; }
+.possibility-note, .open-note { align-self: center; margin: 0; font: 400 clamp(14px, 1.25vw, 18px)/2 "Montserrat", sans-serif; color: var(--gold); letter-spacing: .15em; text-transform: uppercase; }
+.guide-section { background: linear-gradient(90deg, rgba(0,0,0,.6), rgba(0,0,0,.39) 60%, rgba(0,0,0,.12)), url("images/lpx_bg.jpg") center 50% / max(100%, 1100px) auto no-repeat; }
+.guide-copy { max-width: 760px; }
+.basics-section { scroll-margin-top: 25px; }
+.section-intro { max-width: 680px; color: var(--copy-secondary); }
+.basics-preview { max-width: 930px; margin-top: 44px; border-top: 1px solid var(--line); }
+.basic-item { display: grid; grid-template-columns: minmax(210px, .7fr) 1.3fr; gap: 30px; align-items: center; min-height: 83px; border-bottom: 1px solid var(--line); }
+.basic-item span, .basic-stage b { font: 500 10px/1.5 "Montserrat", sans-serif; letter-spacing: .14em; color: var(--gold); }
+.basic-item strong { font: 400 clamp(16px, 1.4vw, 20px)/1.45 "Manrope", sans-serif; color: var(--copy); }
+.basic-stage > div { display: flex; flex-wrap: wrap; gap: 10px; }
+.basic-stage b { padding: 8px 10px; border: 1px solid #66583e; font-weight: 500; }
+.quiet-note { margin-top: 18px; color: var(--copy-secondary); font-size: 14px; }
+.workflow { align-self: center; display: grid; gap: 16px; border-left: 1px solid var(--gold); padding: 12px 0 12px 24px; }
+.workflow span { font: 400 11px/1.5 "Montserrat", sans-serif; letter-spacing: .13em; color: var(--gold); }
+.understanding-section { background: linear-gradient(90deg, rgba(0,0,0,.59), rgba(0,0,0,.34) 58%, rgba(0,0,0,.1)), url("images/lpx_bg.jpg") center 62% / max(100%, 1100px) auto no-repeat; }
+.understanding-list { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 56px; max-width: 1050px; margin: 45px 0 0; padding: 0; }
+.understanding-list li { padding: 20px 0; border-top: 1px solid var(--line); font: 400 clamp(13px, 1.35vw, 18px)/1.5 "Montserrat", sans-serif; letter-spacing: .08em; color: var(--ivory); }
+.vision-section { background: linear-gradient(90deg, rgba(0,0,0,.64), rgba(0,0,0,.42) 60%, rgba(0,0,0,.13)), url("images/lpx_bg.jpg") center bottom / max(100%, 1100px) auto no-repeat; }
+.guide-quote { font: 400 clamp(24px, 2.2vw, 33px)/1.45 "Montserrat", sans-serif; letter-spacing: .03em; color: var(--ivory); margin-block: 36px; }
+.open-section { background: linear-gradient(90deg, rgba(0,0,0,.57), rgba(0,0,0,.35) 58%, rgba(0,0,0,.1)), url("images/lpx_bg.jpg") center 52% / max(100%, 1100px) auto no-repeat; }
+.leave-section { padding-block: clamp(85px, 10vw, 145px); }
+.under-hood { padding-block: 46px; background: rgba(0,0,0,.34); }
+.under-hood h2 { margin-bottom: 18px; font-size: clamp(19px, 2vw, 26px); letter-spacing: .07em; }
+.under-hood p { max-width: 690px; margin: 0; font-size: 15px; color: var(--copy-secondary); }
+.make-close { padding-block: clamp(105px, 13vw, 185px); text-align: center; border-top: 1px solid var(--line); background: linear-gradient(to bottom, rgba(0,0,0,.39), rgba(0,0,0,.59)), url("images/lpx_bg.jpg") center bottom / max(100%, 1150px) auto no-repeat; }
+.make-close h2 { margin-inline: auto; }
+.make-close > .make-width > p { font: 400 clamp(20px, 2vw, 28px)/1.5 "Montserrat", sans-serif; color: var(--ivory); letter-spacing: .04em; }
+.make-close .button { margin-top: 28px; }
+.make-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 24px; padding-block: 30px; }
+.make-footer > a:last-child { font-size: 13px; }
+@media (max-width: 900px) {
+  .make-width { width: calc(100% - 48px); }
+  .make-hero { min-height: 540px; }
+  .make-columns { grid-template-columns: 1fr; gap: 35px; }
+  .possibility-note, .open-note { max-width: 480px; }
+}
+@media (max-width: 600px) {
+  .make-hero { padding-block: 54px 74px; min-height: 500px; }
+  .make-hero h1 { font-size: clamp(31px, 10vw, 42px); }
+  .make-section { padding-block: 65px; }
+  .make-section h2, .make-close h2 { font-size: 24px; letter-spacing: .075em; }
+  .make-hero .button { width: min(100%, 290px); }
+  .basic-item { grid-template-columns: 1fr; gap: 8px; align-content: center; padding-block: 18px; }
+  .understanding-list { grid-template-columns: 1fr; gap: 0; }
+  .understanding-list li { padding-block: 18px; }
+  .make-close { padding-block: 95px; }
+}
