@@ -7,7 +7,7 @@
 .hero-copy { max-width: 650px; }
 .hero-copy p { font-size: clamp(19px, 1.65vw, 24px); line-height: 1.6; }
 .hero-copy p:first-child { font-family: "Montserrat", sans-serif; color: var(--ivory); letter-spacing: .04em; }
-.make-section { padding-block: clamp(62px, 7vw, 100px); border-top: 1px solid var(--line); }
+.make-section { padding-block: clamp(48px, 5vw, 72px); border-top: 1px solid var(--line); }
 .make-section h2, .make-close h2 { max-width: 1020px; font-size: clamp(26px, 3.1vw, 43px); letter-spacing: .095em; line-height: 1.3; }
 .make-copy { max-width: 720px; }
 .make-columns { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(260px, .7fr); gap: clamp(45px, 8vw, 145px); }
@@ -32,7 +32,7 @@
 .vision-section { background: linear-gradient(90deg, rgba(0,0,0,.64), rgba(0,0,0,.42) 60%, rgba(0,0,0,.13)), url("images/lpx_bg.jpg") center bottom / max(100%, 1100px) auto no-repeat; }
 .guide-quote { font: 400 clamp(24px, 2.2vw, 33px)/1.45 "Montserrat", sans-serif; letter-spacing: .03em; color: var(--ivory); margin-block: 36px; }
 .open-section { background: linear-gradient(90deg, rgba(0,0,0,.57), rgba(0,0,0,.35) 58%, rgba(0,0,0,.1)), url("images/lpx_bg.jpg") center 52% / max(100%, 1100px) auto no-repeat; }
-.leave-section { padding-block: clamp(85px, 10vw, 145px); }
+.leave-section { padding-block: clamp(54px, 5.5vw, 78px); }
 .under-hood { padding-block: 46px; background: rgba(0,0,0,.34); }
 .under-hood h2 { margin-bottom: 18px; font-size: clamp(19px, 2vw, 26px); letter-spacing: .07em; }
 .under-hood p { max-width: 690px; margin: 0; font-size: 15px; color: var(--copy-secondary); }
@@ -51,7 +51,7 @@
 @media (max-width: 600px) {
   .make-hero { padding-block: 50px 62px; min-height: 440px; }
   .make-hero h1 { font-size: clamp(31px, 10vw, 42px); }
-  .make-section { padding-block: 58px; }
+  .make-section { padding-block: 48px; }
   .make-section h2, .make-close h2 { font-size: 24px; letter-spacing: .075em; }
   .basic-item { grid-template-columns: 1fr; gap: 8px; align-content: center; padding-block: 18px; }
   .understanding-list { grid-template-columns: 1fr; gap: 0; }
