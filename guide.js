@@ -1,3 +1,7 @@
+import * as pdfjsLib from './vendor/pdfjs/pdf.mjs';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs', import.meta.url).toString();
+
 (() => {
   const basicsStage = document.querySelector('#basics-stage');
   const conversationStage = document.querySelector('#conversation-stage');
@@ -16,6 +20,7 @@
   const fileStatus = document.querySelector('#file-status');
   const state = { basics: null, source: null, messages: [], pending: false };
   const SOURCE_LIMITS = { track_list: 20000, lyrics: 100000, other_material: 50000 };
+  const MAX_LOCAL_FILE_BYTES = 25 * 1024 * 1024;
 
   function clean(value) { return value.trim(); }
   function setBusy(busy) {
@@ -115,19 +120,68 @@
     await askGuide();
   });
   messageInput.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); messageForm.requestSubmit(); } });
-  lyricsFile.addEventListener('change', () => {
+  function normalizeExtractedText(value) {
+    return value.replace(/\r\n?/g, '\n').split('\n').map(line => line.trimEnd()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  function readTextFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+      reader.onerror = () => reject(new Error('That file could not be read. Please paste the text instead.'));
+      reader.readAsText(file);
+    });
+  }
+  async function extractDocxText(file) {
+    if (!window.mammoth) throw new Error('The local DOCX reader is not available. Please try again.');
+    const result = await window.mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+    return result.value || '';
+  }
+  async function extractPdfText(file) {
+    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
+    const pdf = await loadingTask.promise;
+    const pages = [];
+    try {
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+        const content = await (await pdf.getPage(pageNumber)).getTextContent();
+        let line = '';
+        const lines = [];
+        for (const item of content.items) {
+          if (!('str' in item)) continue;
+          line += item.str;
+          if (item.hasEOL) { if (line.trim()) lines.push(line.trim()); line = ''; }
+          else if (item.str) line += ' ';
+        }
+        if (line.trim()) lines.push(line.trim());
+        if (lines.length) pages.push(lines.join('\n'));
+      }
+    } finally { await loadingTask.destroy(); }
+    return pages.join('\n\n');
+  }
+  async function importLocalFile(file) {
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    if (extension === 'doc') throw new Error('Older .doc files aren’t supported yet. Please save it as .docx or PDF.');
+    if (!['txt', 'md', 'docx', 'pdf'].includes(extension)) throw new Error('Choose a TXT, MD, DOCX, or PDF file.');
+    if (file.size > MAX_LOCAL_FILE_BYTES) throw new Error('That file is too large to read locally. Please choose a file smaller than 25 MB.');
+    fileStatus.textContent = 'Reading this file locally…';
+    const extracted = extension === 'docx' ? await extractDocxText(file) : extension === 'pdf' ? await extractPdfText(file) : await readTextFile(file);
+    const cleaned = normalizeExtractedText(extracted);
+    if (!cleaned) throw new Error(extension === 'pdf' ? 'This PDF doesn’t appear to contain readable text. It may be a scanned document. OCR isn’t supported yet.' : 'That file does not contain readable text. Please paste the text instead.');
+    if (extension === 'pdf' && cleaned.replace(/\s/g, '').length < 20) throw new Error('This PDF doesn’t appear to contain readable text. It may be a scanned document. OCR isn’t supported yet.');
+    if (cleaned.length > SOURCE_LIMITS.lyrics) throw new Error('The extracted text is too long for the lyrics field. Please shorten it to under 100,000 characters and try again.');
+    lyricsInput.value = cleaned;
+    lyricsInput.focus();
+    fileStatus.textContent = 'Text was read locally into the lyrics field. Review or edit it before starting.';
+  }
+  lyricsFile.addEventListener('change', async () => {
     const file = lyricsFile.files?.[0];
     if (!file) return;
-    if (!/\.(txt|md)$/i.test(file.name)) { fileStatus.textContent = 'Choose a .txt or .md file.'; lyricsFile.value = ''; return; }
-    if (file.size > SOURCE_LIMITS.lyrics) { fileStatus.textContent = 'That file is too large. Keep lyrics under 100,000 characters.'; lyricsFile.value = ''; return; }
-    const reader = new FileReader();
-    reader.onload = () => { const value = typeof reader.result === 'string' ? reader.result : ''; if (value.length > SOURCE_LIMITS.lyrics) { fileStatus.textContent = 'That file is too large. Keep lyrics under 100,000 characters.'; return; } lyricsInput.value = value; fileStatus.textContent = `${file.name} was read locally into the lyrics field.`; };
-    reader.onerror = () => { fileStatus.textContent = 'That file could not be read. Please paste the text instead.'; };
-    reader.readAsText(file);
+    try { await importLocalFile(file); }
+    catch (error) { fileStatus.textContent = error.message || 'That file could not be read. Please paste the text instead.'; }
+    finally { lyricsFile.value = ''; }
   });
   retryButton.addEventListener('click', askGuide);
   startOverButton.addEventListener('click', () => {
     if (!window.confirm('Start over? This clears this browser-only Guide conversation.')) return;
-    state.basics = null; state.source = null; state.messages = []; messages.replaceChildren(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); fileStatus.textContent = 'Read locally into this temporary session. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
+    state.basics = null; state.source = null; state.messages = []; messages.replaceChildren(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); fileStatus.textContent = 'Read locally into the lyrics field for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
   });
 })();
