@@ -7,8 +7,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   const conversationStage = document.querySelector('#conversation-stage');
   const basicsForm = document.querySelector('#basics-form');
   const messageForm = document.querySelector('#message-form');
+  const imageForm = document.querySelector('#image-form');
   const messageInput = document.querySelector('#artist-message');
   const sendButton = document.querySelector('#send');
+  const imageInput = document.querySelector('#source-image');
+  const imageNote = document.querySelector('#image-note');
+  const addImageButton = document.querySelector('#add-image');
+  const imageStatus = document.querySelector('#image-status');
   const messages = document.querySelector('#messages');
   const thinking = document.querySelector('#thinking');
   const formError = document.querySelector('#basics-error');
@@ -20,9 +25,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   const lyricsFile = document.querySelector('#lyrics-file');
   const fileStatus = document.querySelector('#file-status');
   const clearLyricsButton = document.querySelector('#clear-lyrics');
-  const state = { basics: null, source: null, messages: [], pending: false };
+  const state = { basics: null, source: null, messages: [], pendingImages: [], pending: false };
   const SOURCE_LIMITS = { track_list: 20000, lyrics: 100000, other_material: 50000 };
   const MAX_LOCAL_FILE_BYTES = 25 * 1024 * 1024;
+  const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+  const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
   const VISION_TRIGGER = 'i think i know what this record wants to be';
 
   function clean(value) { return value.trim(); }
@@ -31,6 +38,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     const canWrite = !busy && state.messages.length > 0;
     messageInput.disabled = !canWrite;
     sendButton.disabled = !canWrite;
+    imageInput.disabled = !canWrite;
+    imageNote.disabled = !canWrite;
+    addImageButton.disabled = !canWrite;
     thinking.hidden = !busy;
     if (canWrite) messageInput.focus();
   }
@@ -70,6 +80,33 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     label.textContent = role === 'guide' ? vision ? 'LPX GUIDE · VISION' : 'LPX GUIDE' : 'ARTIST';
     entry.append(label);
     renderSimpleMarkdown(entry, text);
+    messages.append(entry);
+    updateExportAvailability();
+    entry.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }
+  function attachmentText(image) {
+    return `[IMAGE ADDED: ${image.name}]${image.note ? `\nContext: ${image.note}` : ''}`;
+  }
+  function addImageMessage(image) {
+    const entry = document.createElement('article');
+    entry.className = 'message artist image-message';
+    const label = document.createElement('p');
+    label.className = 'message-label';
+    label.textContent = 'ARTIST · VISUAL SOURCE';
+    const preview = document.createElement('img');
+    preview.className = 'image-preview';
+    preview.src = image.dataUrl;
+    preview.alt = `Artist-supplied visual source: ${image.name}`;
+    const name = document.createElement('p');
+    name.className = 'image-name';
+    name.textContent = image.name;
+    entry.append(label, preview, name);
+    if (image.note) {
+      const context = document.createElement('p');
+      context.className = 'message-body image-context';
+      context.textContent = image.note;
+      entry.append(context);
+    }
     messages.append(entry);
     updateExportAvailability();
     entry.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -114,11 +151,12 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     hideError();
     setBusy(true);
     try {
-      const response = await fetch('/api/guide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ basics: state.basics, source: state.source, messages: state.messages }) });
+      const response = await fetch('/api/guide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ basics: state.basics, source: state.source, messages: state.messages, images: state.pendingImages }) });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload?.message) throw new Error(payload?.error || 'The Guide could not respond just now. Please try again.');
       state.messages.push({ role: 'assistant', text: payload.message });
       addMessage('guide', payload.message);
+      state.pendingImages = [];
     } catch (error) {
       showError(error.message || 'The Guide could not respond just now. Please try again.');
     } finally { setBusy(false); }
@@ -145,6 +183,40 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     addMessage('artist', text);
     messageInput.value = '';
     await askGuide();
+  });
+  function readImageFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('That image could not be read. Please try another file.'));
+      reader.onerror = () => reject(new Error('That image could not be read. Please try another file.'));
+      reader.readAsDataURL(file);
+    });
+  }
+  function validateImageFile(file) {
+    if (!file) return 'Choose a JPEG, PNG, or WebP image first.';
+    if (!IMAGE_TYPES.has(file.type)) return 'Choose a JPEG, PNG, or WebP image. SVG and GIF files are not supported.';
+    if (file.size > MAX_IMAGE_BYTES) return 'That image is too large. Please choose one under 4 MB.';
+    return '';
+  }
+  imageForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (state.pending) return;
+    const file = imageInput.files?.[0];
+    const error = validateImageFile(file);
+    if (error) { imageStatus.textContent = error; return; }
+    imageStatus.textContent = 'Preparing image…';
+    try {
+      const image = { name: file.name.slice(0, 200), type: file.type, note: clean(imageNote.value).slice(0, 1000), dataUrl: await readImageFile(file) };
+      state.pendingImages.push(image);
+      state.messages.push({ role: 'user', text: attachmentText(image) });
+      addImageMessage(image);
+      imageInput.value = '';
+      imageNote.value = '';
+      imageStatus.textContent = 'Image added. The Guide is looking at it now.';
+      await askGuide();
+    } catch (issue) {
+      imageStatus.textContent = issue.message || 'That image could not be added. Please try another file.';
+    }
   });
   messageInput.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); messageForm.requestSubmit(); } });
   function normalizeExtractedText(value) {
@@ -230,6 +302,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   downloadConversationButton.addEventListener('click', downloadConversation);
   startOverButton.addEventListener('click', () => {
     if (!window.confirm('Start over? This clears this browser-only Guide conversation.')) return;
-    state.basics = null; state.source = null; state.messages = []; messages.replaceChildren(); updateExportAvailability(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
+    state.basics = null; state.source = null; state.messages = []; state.pendingImages = []; messages.replaceChildren(); updateExportAvailability(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); imageForm.reset(); imageStatus.textContent = 'JPEG, PNG, or WebP · up to 4 MB · sent only with this Guide request.'; fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
   });
 })();
