@@ -1,5 +1,4 @@
 const MAX_MESSAGE_CHARS = 5000;
-const MAX_TURNS = 50;
 const MAX_REQUEST_CHARS = 6000000;
 const MAX_BASIC_CHARS = 2000;
 const SOURCE_LIMITS = { track_list: 20000, lyrics: 100000, other_material: 50000 };
@@ -62,7 +61,7 @@ export async function onRequest(context) {
   const required = ['identity', 'name', 'music', 'record', 'stage'];
   for (const key of required) if (!text(basics[key], MAX_BASIC_CHARS)) return json({ error: 'Please complete the essential Basics before starting the conversation.' }, 400);
   const messages = data.messages;
-  if (!Array.isArray(messages) || messages.length > MAX_TURNS) return json({ error: 'This prototype can hold up to 50 conversation turns. Please start over to continue.' }, 400);
+  if (!Array.isArray(messages)) return json({ error: 'The Guide could not read the conversation history. Please try again.' }, 400);
   const history = [];
   for (const message of messages) {
     if (!message || !['user', 'assistant'].includes(message.role) || !text(message.text, MAX_MESSAGE_CHARS)) return json({ error: 'A conversation message is missing or too long. Artist messages can be up to 5,000 characters.' }, 400);

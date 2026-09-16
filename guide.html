@@ -73,18 +73,11 @@
       <div id="messages" class="messages" aria-live="polite" aria-relevant="additions" aria-label="LPX Guide conversation"></div>
       <div id="thinking" class="thinking" hidden aria-live="polite">LPX GUIDE IS THINKING<span aria-hidden="true">…</span></div>
       <div id="request-error" class="request-error" role="alert" hidden><p></p><button id="retry" class="text-button" type="button">RETRY</button></div>
-      <form id="image-form" class="image-form">
-        <label for="source-image">ADD AN IMAGE</label>
-        <p>Cover art, a character, a page, a sketch, a photograph, or another visual reference. The Guide can see it.</p>
-        <div class="image-fields">
-          <input id="source-image" type="file" accept="image/jpeg,image/png,image/webp">
-          <textarea id="image-note" maxlength="1000" rows="2" placeholder="Optional context — what is this image, or what role should it play?"></textarea>
-        </div>
-        <div class="image-controls"><p id="image-status" aria-live="polite">JPEG, PNG, or WebP · up to 4 MB · sent only with this Guide request.</p><button id="add-image" class="text-button" type="submit">ADD TO GUIDE</button></div>
-      </form>
       <form id="message-form" class="message-form">
         <label for="artist-message">ARTIST</label>
         <textarea id="artist-message" name="message" maxlength="5000" rows="4" placeholder="Say what’s on your mind about the record." disabled></textarea>
+        <div class="composer-attachment"><label class="text-button" for="source-image">ADD IMAGE / ARTWORK</label><input id="source-image" type="file" accept="image/jpeg,image/png,image/webp"><p id="image-status" aria-live="polite">JPEG, PNG, or WebP · up to 4 MB</p></div>
+        <textarea id="image-note" class="image-note" maxlength="1000" rows="2" placeholder="Optional image context — what is this, or what role should it play?"></textarea>
         <div class="message-controls"><p>ENTER TO SEND · SHIFT + ENTER FOR A NEW LINE</p><button id="send" class="button" type="submit" disabled>SEND</button></div>
       </form>
     </section>

@@ -60,14 +60,11 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--gold); ou
 .thinking { padding: 8px 0 30px; color: var(--gold); font: 500 10px/1.5 "Montserrat", sans-serif; letter-spacing: .15em; }
 .request-error { display: flex; align-items: center; gap: 20px; margin: 0 0 28px; padding: 16px 0; border-top: 1px solid #8f6556; border-bottom: 1px solid #8f6556; }
 .request-error p { margin: 0; flex: 1; }
-.image-form { margin-top: 4px; padding: 24px 0 28px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.image-form > label { display: block; margin-bottom: 8px; font: 500 11px/1.5 "Montserrat", sans-serif; letter-spacing: .12em; color: var(--gold); }
-.image-form > p { max-width: 620px; margin: 0; color: var(--copy-secondary); font-size: 14px; }
-.image-fields { display: grid; grid-template-columns: minmax(200px, .75fr) minmax(0, 1.25fr); gap: 24px 32px; align-items: start; margin-top: 20px; }
-.image-fields input { color: var(--copy); font: 400 14px/1.5 "Manrope", sans-serif; }
-.image-fields textarea { width: 100%; min-height: 76px; border: 0; border-bottom: 1px solid #7b6a4c; border-radius: 0; background: rgba(0,0,0,.27); color: var(--copy); font: 400 15px/1.6 "Manrope", sans-serif; padding: 9px 12px; resize: vertical; }
-.image-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px 24px; margin-top: 14px; }
-.image-controls p { margin: 0; color: var(--copy-secondary); font: 500 9px/1.5 "Montserrat", sans-serif; letter-spacing: .08em; }
+.composer-attachment { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 18px; margin-top: 16px; }
+.composer-attachment .text-button { margin: 0; }
+.composer-attachment input { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.composer-attachment p { margin: 0; color: var(--copy-secondary); font: 500 9px/1.5 "Montserrat", sans-serif; letter-spacing: .08em; }
+.image-note { width: 100%; min-height: 64px; margin-top: 12px; border: 0; border-bottom: 1px solid #7b6a4c; border-radius: 0; background: rgba(0,0,0,.27); color: var(--copy); font: 400 15px/1.6 "Manrope", sans-serif; padding: 9px 12px; resize: vertical; }
 .image-preview { display: block; width: min(100%, 240px); max-height: 240px; margin: 0 0 12px auto; border: 1px solid rgba(203,171,102,.55); object-fit: contain; background: rgba(0,0,0,.34); }
 .image-name { margin: 0; color: var(--copy); font: 500 10px/1.5 "Montserrat", sans-serif; letter-spacing: .11em; overflow-wrap: anywhere; }
 .image-context { margin-top: 12px !important; color: var(--copy); }
@@ -78,5 +75,5 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--gold); ou
 .message-controls p { margin: 0; color: var(--copy-secondary); font: 500 9px/1.5 "Montserrat", sans-serif; letter-spacing: .1em; }
 .message-controls .button { min-width: 160px; }
 .button:disabled, .text-button:disabled, textarea:disabled { cursor: not-allowed; opacity: .58; }
-@media (max-width: 700px) { .guide-width { width: calc(100% - 48px); } .guide-intro { padding-block: 52px 72px; } .guide-lead { margin-bottom: 40px; } .basics-fields > label, .source-fields > label, .local-import, .image-fields { grid-template-columns: 1fr; gap: 12px; } .local-import p, .local-import .text-button { grid-column: auto; } .conversation { padding-block: 48px 65px; } .message.artist { padding-left: 32px; } .message.guide { padding-right: 20px; } .message.vision { margin-block: 24px 46px; padding: 24px 20px 28px; } .image-preview { margin-left: 0; } }
+@media (max-width: 700px) { .guide-width { width: calc(100% - 48px); } .guide-intro { padding-block: 52px 72px; } .guide-lead { margin-bottom: 40px; } .basics-fields > label, .source-fields > label, .local-import { grid-template-columns: 1fr; gap: 12px; } .local-import p, .local-import .text-button { grid-column: auto; } .conversation { padding-block: 48px 65px; } .message.artist { padding-left: 32px; } .message.guide { padding-right: 20px; } .message.vision { margin-block: 24px 46px; padding: 24px 20px 28px; } .image-preview { margin-left: 0; } }
 @media (max-width: 450px) { .guide-width { width: calc(100% - 32px); } .record-stage > div { display: grid; } .record-stage label { width: 100%; } .conversation-header { display: block; } .conversation-actions { justify-content: flex-start; gap: 18px; margin-top: 16px; } .conversation-header .text-button { margin-top: 0; } .message-controls .button { width: 100%; } }
