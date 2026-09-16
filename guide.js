@@ -15,6 +15,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   const requestError = document.querySelector('#request-error');
   const retryButton = document.querySelector('#retry');
   const startOverButton = document.querySelector('#start-over');
+  const downloadConversationButton = document.querySelector('#download-conversation');
   const lyricsInput = document.querySelector('#lyrics');
   const lyricsFile = document.querySelector('#lyrics-file');
   const fileStatus = document.querySelector('#file-status');
@@ -38,6 +39,25 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     requestError.hidden = false;
   }
   function hideError() { requestError.hidden = true; }
+  function updateExportAvailability() { downloadConversationButton.disabled = state.messages.length === 0; }
+  function exportDate() { return new Date().toISOString().slice(0, 10); }
+  function buildConversationTranscript() {
+    const header = `LPX GUIDE — CREATIVE CONVERSATION\nExported: ${exportDate()}`;
+    const transcript = state.messages.map(message => `${message.role === 'user' ? 'ARTIST' : 'LPX GUIDE'}:\n\n${message.text.trim()}`).join('\n\n----------------------------------------\n\n');
+    return `${header}\n\n${transcript}\n`;
+  }
+  function downloadConversation() {
+    if (!state.messages.length) return;
+    const file = new Blob([buildConversationTranscript()], { type: 'text/plain;charset=utf-8' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(file);
+    link.href = url;
+    link.download = `LPX_Guide_Conversation_${exportDate()}.txt`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
   function isVisionMoment(text) {
     return text.replace(/\*\*|__/g, '').toLocaleLowerCase().includes(VISION_TRIGGER);
   }
@@ -51,6 +71,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     entry.append(label);
     renderSimpleMarkdown(entry, text);
     messages.append(entry);
+    updateExportAvailability();
     entry.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }
   function renderSimpleMarkdown(container, text) {
@@ -206,8 +227,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     lyricsInput.focus();
   });
   retryButton.addEventListener('click', askGuide);
+  downloadConversationButton.addEventListener('click', downloadConversation);
   startOverButton.addEventListener('click', () => {
     if (!window.confirm('Start over? This clears this browser-only Guide conversation.')) return;
-    state.basics = null; state.source = null; state.messages = []; messages.replaceChildren(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
+    state.basics = null; state.source = null; state.messages = []; messages.replaceChildren(); updateExportAvailability(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
   });
 })();
