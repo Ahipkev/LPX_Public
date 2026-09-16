@@ -22,6 +22,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   const state = { basics: null, source: null, messages: [], pending: false };
   const SOURCE_LIMITS = { track_list: 20000, lyrics: 100000, other_material: 50000 };
   const MAX_LOCAL_FILE_BYTES = 25 * 1024 * 1024;
+  const VISION_TRIGGER = 'i think i know what this record wants to be';
 
   function clean(value) { return value.trim(); }
   function setBusy(busy) {
@@ -37,12 +38,16 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     requestError.hidden = false;
   }
   function hideError() { requestError.hidden = true; }
+  function isVisionMoment(text) {
+    return text.replace(/\*\*|__/g, '').toLocaleLowerCase().includes(VISION_TRIGGER);
+  }
   function addMessage(role, text) {
     const entry = document.createElement('article');
-    entry.className = `message ${role}`;
+    const vision = role === 'guide' && isVisionMoment(text);
+    entry.className = `message ${role}${vision ? ' vision' : ''}`;
     const label = document.createElement('p');
     label.className = 'message-label';
-    label.textContent = role === 'guide' ? 'LPX GUIDE' : 'ARTIST';
+    label.textContent = role === 'guide' ? vision ? 'LPX GUIDE · VISION' : 'LPX GUIDE' : 'ARTIST';
     entry.append(label);
     renderSimpleMarkdown(entry, text);
     messages.append(entry);
