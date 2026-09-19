@@ -73,6 +73,9 @@
       <div id="messages" class="messages" aria-live="polite" aria-relevant="additions" aria-label="LPX Guide conversation"></div>
       <div id="thinking" class="thinking" hidden aria-live="polite">LPX GUIDE IS THINKING<span aria-hidden="true">…</span></div>
       <div id="request-error" class="request-error" role="alert" hidden><p></p><button id="retry" class="text-button" type="button">RETRY</button></div>
+      <section id="brief-artifact" class="brief-artifact" hidden aria-live="polite"><p class="eyebrow">LPX CREATIVE BRIEF</p><h2>Your LPX Creative Brief is ready.</h2><div id="brief-content"></div><button id="download-brief" class="button" type="button">DOWNLOAD CREATIVE BRIEF (.MD)</button></section>
+      <div id="brief-progress" class="thinking" hidden aria-live="polite">PREPARING YOUR LPX CREATIVE BRIEF<span aria-hidden="true">…</span></div>
+      <div id="brief-error" class="request-error" role="alert" hidden><p></p><button id="retry-brief" class="text-button" type="button">RETRY CREATIVE BRIEF</button></div>
       <form id="message-form" class="message-form">
         <label for="artist-message">ARTIST</label>
         <textarea id="artist-message" name="message" maxlength="5000" rows="4" placeholder="Say what’s on your mind about the record." disabled></textarea>

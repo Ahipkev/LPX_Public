@@ -60,6 +60,11 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--gold); ou
 .thinking { padding: 8px 0 30px; color: var(--gold); font: 500 10px/1.5 "Montserrat", sans-serif; letter-spacing: .15em; }
 .request-error { display: flex; align-items: center; gap: 20px; margin: 0 0 28px; padding: 16px 0; border-top: 1px solid #8f6556; border-bottom: 1px solid #8f6556; }
 .request-error p { margin: 0; flex: 1; }
+.brief-artifact { max-width: 850px; margin: 28px 0; padding: clamp(24px,4vw,42px); border-top: 1px solid var(--gold); border-bottom: 1px solid rgba(203,171,102,.56); background: rgba(0,0,0,.16); }
+.brief-artifact h2 { margin: 0 0 28px; font-size: clamp(24px,3vw,38px); letter-spacing: .08em; }
+.brief-artifact h3 { margin: 30px 0 12px; color: var(--gold); font: 400 16px/1.4 "Montserrat",sans-serif; letter-spacing: .1em; }
+.brief-artifact h3:first-child { margin-top: 0; }
+.brief-artifact .button { margin: 32px 0 0; }
 .composer-attachment { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 18px; margin-top: 16px; }
 .composer-attachment .text-button { margin: 0; }
 .composer-attachment input { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
