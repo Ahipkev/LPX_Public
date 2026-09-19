@@ -64,7 +64,9 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--gold); ou
 .brief-artifact h2 { margin: 0 0 28px; font-size: clamp(24px,3vw,38px); letter-spacing: .08em; }
 .brief-artifact h3 { margin: 30px 0 12px; color: var(--gold); font: 400 16px/1.4 "Montserrat",sans-serif; letter-spacing: .1em; }
 .brief-artifact h3:first-child { margin-top: 0; }
-.brief-artifact .button { margin: 32px 0 0; }
+.artifact-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 20px 28px; margin-top: 32px; }
+.brief-artifact .button { margin: 0; }
+.artifact-actions .text-button { margin: 0; }
 .composer-attachment { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 18px; margin-top: 16px; }
 .composer-attachment .text-button { margin: 0; }
 .composer-attachment input { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }

@@ -23,6 +23,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   const briefError = document.querySelector('#brief-error');
   const retryBriefButton = document.querySelector('#retry-brief');
   const downloadBriefButton = document.querySelector('#download-brief');
+  const downloadProjectButton = document.querySelector('#download-project');
   const startOverButton = document.querySelector('#start-over');
   const downloadConversationButton = document.querySelector('#download-conversation');
   const lyricsInput = document.querySelector('#lyrics');
@@ -231,7 +232,20 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   });
   function showBriefError(message) { briefError.querySelector('p').textContent = message; briefError.hidden = false; }
   function safeFilename(value) { return value.normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s-]+/g, '_').slice(0, 80) || 'LPX'; }
+  function artifactFilename(suffix) { return `${safeFilename(state.basics.name)}_${safeFilename(state.basics.record)}_${suffix}`; }
   function briefMarkdown(brief) { return `# LPX Creative Brief — ${brief.title}\n\n${brief.sections.map(section => `## ${section.title}\n\n${section.markdown}`).join('\n\n')}\n`; }
+  function projectFile(brief) {
+    const source = state.source || {};
+    return {
+      format: 'lpx-project', version: '0.1',
+      artist: { identity: state.basics.identity, name: state.basics.name, people: state.basics.people || null, roles: state.basics.roles || null },
+      record: { title: state.basics.record, status: state.basics.stage, music: state.basics.music, track_list: source.track_list || null },
+      creative_brief: { title: brief.title, sections: brief.sections.map(section => ({ id: section.id, title: section.title, markdown: section.markdown })) },
+      source_material: { lyrics_supplied: Boolean(source.lyrics), other_material_supplied: Boolean(source.other_material) },
+      visual_sources: state.messages.filter(message => message.role === 'user' && message.text.startsWith('[IMAGE ADDED:')).map(message => message.text),
+      notes: ['Generated from the completed LPX Creative Brief. This file carries approved creative direction for builder handoff.']
+    };
+  }
   function renderBrief(brief) { briefContent.replaceChildren(); brief.sections.forEach(section => { const block = document.createElement('section'); const heading = document.createElement('h3'); heading.textContent = section.title; block.append(heading); renderSimpleMarkdown(block, section.markdown); briefContent.append(block); }); briefArtifact.hidden = false; }
   async function briefRequest(action, extra = {}) { const response = await fetch('/api/brief', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ basics: state.basics, source: state.source, messages: state.messages, action, ...extra }) }); const payload = await response.json().catch(() => null); if (!response.ok || !payload) throw new Error(payload?.error || 'The Creative Brief could not be prepared. Please retry.'); return payload; }
   async function generateCreativeBrief() {
@@ -249,7 +263,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     } catch (error) { showBriefError(error.message || 'The Creative Brief could not be prepared. Please retry.'); }
     finally { state.briefPending = false; briefProgress.hidden = true; setBusy(false); }
   }
-  downloadBriefButton.addEventListener('click', () => { if (!state.brief) return; const file = new Blob([briefMarkdown(state.brief)], { type: 'text/markdown;charset=utf-8' }); const link = document.createElement('a'); const url = URL.createObjectURL(file); link.href = url; link.download = `${safeFilename(state.basics.name)}_${safeFilename(state.basics.record)}_LPX_Creative_Brief.md`; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 0); });
+  function downloadFile(contents, type, name) { const file = new Blob([contents], { type }); const link = document.createElement('a'); const url = URL.createObjectURL(file); link.href = url; link.download = name; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 0); }
+  downloadBriefButton.addEventListener('click', () => { if (state.brief) downloadFile(briefMarkdown(state.brief), 'text/markdown;charset=utf-8', artifactFilename('LPX_Creative_Brief.md')); });
+  downloadProjectButton.addEventListener('click', () => { if (state.brief) downloadFile(`${JSON.stringify(projectFile(state.brief), null, 2)}\n`, 'application/json;charset=utf-8', artifactFilename('LPX_Project.lpx.json')); });
   retryBriefButton.addEventListener('click', generateCreativeBrief);
   messageInput.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); messageForm.requestSubmit(); } });
   function normalizeExtractedText(value) {
