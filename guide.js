@@ -18,19 +18,22 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   const requestError = document.querySelector('#request-error');
   const retryButton = document.querySelector('#retry');
   const briefArtifact = document.querySelector('#brief-artifact');
+  const briefState = document.querySelector('#brief-state');
+  const briefHeading = document.querySelector('#brief-heading');
   const briefContent = document.querySelector('#brief-content');
   const briefProgress = document.querySelector('#brief-progress');
   const briefError = document.querySelector('#brief-error');
   const retryBriefButton = document.querySelector('#retry-brief');
   const downloadBriefButton = document.querySelector('#download-brief');
   const downloadProjectButton = document.querySelector('#download-project');
+  const lockBriefButton = document.querySelector('#lock-brief');
   const startOverButton = document.querySelector('#start-over');
   const downloadConversationButton = document.querySelector('#download-conversation');
   const lyricsInput = document.querySelector('#lyrics');
   const lyricsFile = document.querySelector('#lyrics-file');
   const fileStatus = document.querySelector('#file-status');
   const clearLyricsButton = document.querySelector('#clear-lyrics');
-  const state = { basics: null, source: null, messages: [], pendingImages: [], pending: false, brief: null, briefApproved: false, briefPending: false };
+  const state = { basics: null, source: null, messages: [], pendingImages: [], pending: false, brief: null, briefApproved: false, briefPending: false, canonLocked: false };
   const SOURCE_LIMITS = { track_list: 20000, lyrics: 100000, other_material: 50000 };
   const MAX_LOCAL_FILE_BYTES = 25 * 1024 * 1024;
   const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -209,6 +212,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     const error = validateImageFile(file);
     if (file && error) { imageStatus.textContent = error; return; }
     try {
+      if (state.brief && !state.canonLocked) { state.brief = null; briefArtifact.hidden = true; }
       const generateBrief = text && state.briefApproved && isBriefApproval(text) && !file;
       if (text) {
         state.messages.push({ role: 'user', text });
@@ -233,20 +237,21 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   function showBriefError(message) { briefError.querySelector('p').textContent = message; briefError.hidden = false; }
   function safeFilename(value) { return value.normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s-]+/g, '_').slice(0, 80) || 'LPX'; }
   function artifactFilename(suffix) { return `${safeFilename(state.basics.name)}_${safeFilename(state.basics.record)}_${suffix}`; }
-  function briefMarkdown(brief) { return `# LPX Creative Brief — ${brief.title}\n\n${brief.sections.map(section => `## ${section.title}\n\n${section.markdown}`).join('\n\n')}\n`; }
+  function briefMarkdown(brief) { return `# Canonical LPX Creative Brief — ${brief.title}\n\n${brief.sections.map(section => `## ${section.title}\n\n${section.markdown}`).join('\n\n')}\n`; }
   function projectFile(brief) {
     const source = state.source || {};
     return {
       format: 'lpx-project', version: '0.1',
       artist: { identity: state.basics.identity, name: state.basics.name, people: state.basics.people || null, roles: state.basics.roles || null },
       record: { title: state.basics.record, status: state.basics.stage, music: state.basics.music, track_list: source.track_list || null },
-      creative_brief: { title: brief.title, sections: brief.sections.map(section => ({ id: section.id, title: section.title, markdown: section.markdown })) },
+      creative_brief: { state: 'canonical', title: brief.title, sections: brief.sections.map(section => ({ id: section.id, title: section.title, markdown: section.markdown })) },
+      canon_ledger: brief.ledger || [],
       source_material: { lyrics_supplied: Boolean(source.lyrics), other_material_supplied: Boolean(source.other_material) },
       visual_sources: state.messages.filter(message => message.role === 'user' && message.text.startsWith('[IMAGE ADDED:')).map(message => message.text),
       notes: ['Generated from the completed LPX Creative Brief. This file carries approved creative direction for builder handoff.']
     };
   }
-  function renderBrief(brief) { briefContent.replaceChildren(); brief.sections.forEach(section => { const block = document.createElement('section'); const heading = document.createElement('h3'); heading.textContent = section.title; block.append(heading); renderSimpleMarkdown(block, section.markdown); briefContent.append(block); }); briefArtifact.hidden = false; }
+  function renderBrief(brief) { briefContent.replaceChildren(); brief.sections.forEach(section => { const block = document.createElement('section'); const heading = document.createElement('h3'); heading.textContent = section.title; block.append(heading); renderSimpleMarkdown(block, section.markdown); briefContent.append(block); }); briefState.textContent = state.canonLocked ? 'CANONICAL CREATIVE BRIEF — LOCKED IMPLEMENTATION AUTHORITY' : 'CREATIVE EXPLORATION BRIEF — NOT LOCKED CANON'; briefHeading.textContent = state.canonLocked ? 'Your Canonical Creative Brief is ready.' : 'Here is what I think we have.'; lockBriefButton.hidden = state.canonLocked; downloadBriefButton.hidden = !state.canonLocked; downloadProjectButton.hidden = !state.canonLocked; briefArtifact.hidden = false; }
   async function briefRequest(action, extra = {}) { const response = await fetch('/api/brief', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ basics: state.basics, source: state.source, messages: state.messages, action, ...extra }) }); const payload = await response.json().catch(() => null); if (!response.ok || !payload) throw new Error(payload?.error || 'The Creative Brief could not be prepared. Please retry.'); return payload; }
   async function generateCreativeBrief() {
     if (state.briefPending) return;
@@ -256,7 +261,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
       const sections = [];
       for (const section of plan.sections) sections.push((await briefRequest('section', { section })).section);
       if (sections.length !== plan.sections.length || new Set(sections.map(section => section.id)).size !== plan.sections.length) throw new Error('The Creative Brief was incomplete. Please retry.');
-      state.brief = { title: plan.title, sections: plan.sections.map(section => ({ ...section, markdown: sections.find(item => item.id === section.id).markdown })) };
+      state.brief = { title: plan.title, ledger: plan.ledger || [], sections: plan.sections.map(section => ({ ...section, markdown: sections.find(item => item.id === section.id).markdown })) };
+      state.canonLocked = false;
       renderBrief(state.brief);
       state.messages.push({ role: 'assistant', text: 'Your LPX Creative Brief is ready.' });
       state.briefApproved = false;
@@ -266,6 +272,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   function downloadFile(contents, type, name) { const file = new Blob([contents], { type }); const link = document.createElement('a'); const url = URL.createObjectURL(file); link.href = url; link.download = name; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 0); }
   downloadBriefButton.addEventListener('click', () => { if (state.brief) downloadFile(briefMarkdown(state.brief), 'text/markdown;charset=utf-8', artifactFilename('LPX_Creative_Brief.md')); });
   downloadProjectButton.addEventListener('click', () => { if (state.brief) downloadFile(`${JSON.stringify(projectFile(state.brief), null, 2)}\n`, 'application/json;charset=utf-8', artifactFilename('LPX_Project.lpx.json')); });
+  lockBriefButton.addEventListener('click', async () => { if (!state.brief || state.briefPending) return; state.briefPending = true; briefProgress.hidden = false; briefError.hidden = true; try { const response = await briefRequest('reconcile', { ledger: state.brief.ledger }); state.brief.ledger = response.ledger; state.canonLocked = true; renderBrief(state.brief); state.messages.push({ role: 'assistant', text: 'Your Canonical Creative Brief is locked and ready for implementation.' }); } catch (error) { showBriefError(error.message || 'The Canon Ledger could not be reconciled. Please retry.'); } finally { state.briefPending = false; briefProgress.hidden = true; } });
   retryBriefButton.addEventListener('click', generateCreativeBrief);
   messageInput.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); messageForm.requestSubmit(); } });
   function normalizeExtractedText(value) {
@@ -351,6 +358,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   downloadConversationButton.addEventListener('click', downloadConversation);
   startOverButton.addEventListener('click', () => {
     if (!window.confirm('Start over? This clears this browser-only Guide conversation.')) return;
-    state.basics = null; state.source = null; state.messages = []; state.pendingImages = []; state.brief = null; state.briefApproved = false; messages.replaceChildren(); briefContent.replaceChildren(); briefArtifact.hidden = true; briefError.hidden = true; updateExportAvailability(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); messageForm.reset(); imageStatus.textContent = 'JPEG, PNG, or WebP · up to 4 MB'; fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
+    state.basics = null; state.source = null; state.messages = []; state.pendingImages = []; state.brief = null; state.briefApproved = false; state.canonLocked = false; messages.replaceChildren(); briefContent.replaceChildren(); briefArtifact.hidden = true; briefError.hidden = true; updateExportAvailability(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); messageForm.reset(); imageStatus.textContent = 'JPEG, PNG, or WebP · up to 4 MB'; fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
   });
 })();
