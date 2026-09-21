@@ -104,18 +104,9 @@ export async function onRequest(context) {
   } catch { return json({ error: 'The Guide took too long to respond. Please try again.' }, 504); }
   finally { clearTimeout(timeout); }
   if (!upstream.ok) {
-    let diagnostic;
-    if (context.request.headers.get('x-lpx-diagnostic') === '1') {
-      const providerText = await upstream.text().catch(() => '');
-      let provider; try { provider = JSON.parse(providerText); } catch { provider = null; }
-      const error = provider?.error || provider || {};
-      const detail = [typeof error === 'string' ? error : '', typeof error.type === 'string' ? error.type : '', typeof error.code === 'string' ? error.code : '', typeof error.message === 'string' ? error.message : '', providerText].join(' ').toLowerCase();
-      const category = /permission|scope|not authorized/.test(detail) ? 'permission' : /api.?key|authentication|unauthorized/.test(detail) ? 'authentication' : /model|not found|does not exist/.test(detail) ? 'model-access' : /parameter|invalid request|unsupported|malformed/.test(detail) ? 'request-format' : 'unclassified-upstream-400';
-      diagnostic = { upstreamStatus: upstream.status, category };
-    }
     if (upstream.status === 429) return json({ error: 'The Guide is receiving a lot of attention right now. Please wait a moment and retry.' }, 429);
     if (upstream.status === 401 || upstream.status === 403) return json({ error: 'The Guide is not configured correctly yet. Please try again later.' }, 503);
-    return json({ error: 'The Guide could not respond just now. Please try again.', ...(diagnostic ? { diagnostic } : {}) }, 502);
+    return json({ error: 'The Guide could not respond just now. Please try again.' }, 502);
   }
   let response;
   try { response = await upstream.json(); } catch { return json({ error: 'The Guide returned an unreadable response. Please retry.' }, 502); }
