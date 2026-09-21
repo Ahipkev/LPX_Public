@@ -43,6 +43,12 @@ function imageDataUrl(value) {
   if (bytes <= 0 || bytes > MAX_IMAGE_BYTES) return null;
   return { name: value.name.trim(), type: value.type, note: value.note.trim(), dataUrl: value.dataUrl };
 }
+function listeningRecord(value) {
+  if (!value || typeof value !== 'object' || value.schema !== 'lpx-listening-record/0.1' || !value.source || typeof value.source !== 'object' || typeof value.source.display_name !== 'string' || !/^[a-f0-9]{64}$/i.test(value.source.content_hash || '') || !Array.isArray(value.timeline) || !Array.isArray(value.observations) || !Array.isArray(value.interpretations) || !Array.isArray(value.uncertainties)) return null;
+  if (value.timeline.length < 3 || value.timeline.length > 30 || value.observations.length > 20 || value.interpretations.length > 16 || value.uncertainties.length > 16) return null;
+  const safe = JSON.stringify({ schema: value.schema, source: { display_name: value.source.display_name.slice(0, 200), duration: typeof value.source.duration === 'string' ? value.source.duration.slice(0, 40) : '' }, timeline: value.timeline, musical_development: value.musical_development, texture: value.texture, significant_events: value.significant_events, beginning: value.beginning, final_minute: value.final_minute, final_thirty_seconds: value.final_thirty_seconds, ending: value.ending, observations: value.observations, interpretations: value.interpretations, uncertainties: value.uncertainties });
+  return safe.length <= 24000 ? safe : null;
+}
 function getOutputText(output) {
   if (!Array.isArray(output)) return '';
   return output.flatMap(item => item?.type === 'message' && Array.isArray(item.content) ? item.content : []).filter(part => part?.type === 'output_text' && typeof part.text === 'string').map(part => part.text).join('\n').trim();
@@ -78,6 +84,8 @@ export async function onRequest(context) {
   if (!Array.isArray(images) || images.length > MAX_IMAGES_PER_REQUEST) return json({ error: 'Add one JPEG, PNG, or WebP image at a time.' }, 400);
   const visualSources = images.map(imageDataUrl);
   if (visualSources.some(image => !image)) return json({ error: 'That image could not be accepted. Use a JPEG, PNG, or WebP image under 4 MB.' }, 400);
+  const audioContext = data.listeningRecord === undefined || data.listeningRecord === null ? '' : listeningRecord(data.listeningRecord);
+  if (data.listeningRecord && !audioContext) return json({ error: 'The recording context could not be read. Please listen to it again.' }, 400);
   if (!context.env.OPENAI_API_KEY) return json({ error: 'The Guide is not configured yet. Please try again after the site administrator adds its server-side API key.' }, 503);
   const basicsContext = `Artist Basics (already known; do not repeat these back as a list):\nWhat they are: ${basics.identity.trim()}\nName: ${basics.name.trim()}\nMusic: ${basics.music.trim()}\nPeople involved: ${(text(basics.people, MAX_BASIC_CHARS) || 'Not provided')}\nRoles: ${(text(basics.roles, MAX_BASIC_CHARS) || 'Not provided')}\nRecord: ${basics.record.trim()}\nRecord status: ${basics.stage.trim()}`;
   const sourceContext = Object.entries(sourceMaterial).filter(([, value]) => value).map(([key, value]) => `--- ${key === 'track_list' ? 'Track list' : key === 'other_material' ? 'Other written material' : 'Lyrics'} ---\n${value}`).join('\n\n');
@@ -92,7 +100,7 @@ export async function onRequest(context) {
   const timeout = setTimeout(() => controller.abort(), 45000);
   let upstream;
   try {
-    upstream = await fetch('https://api.openai.com/v1/responses', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.env.OPENAI_API_KEY}` }, body: JSON.stringify({ model: 'gpt-5.6-terra', store: false, reasoning: { effort: 'medium' }, max_output_tokens: 900, instructions: `${GUIDE_INSTRUCTIONS}\n\n${basicsContext}${sourceContext ? `\n\nOptional source material for this active session:\n${sourceContext}` : ''}`, input }) });
+    upstream = await fetch('https://api.openai.com/v1/responses', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.env.OPENAI_API_KEY}` }, body: JSON.stringify({ model: 'gpt-5.6-terra', store: false, reasoning: { effort: 'medium' }, max_output_tokens: 900, instructions: `${GUIDE_INSTRUCTIONS}\n\n${basicsContext}${sourceContext ? `\n\nOptional source material for this active session:\n${sourceContext}` : ''}${audioContext ? `\n\nAudio-derived listening observations for this active session. This is provider-neutral working evidence, not artist canon. The artist remains authoritative over meaning. Timestamps are approximate. Use it naturally if relevant; never name a provider, expose a schema, or present interpretations as fact.\n${audioContext}` : ''}`, input }) });
   } catch { return json({ error: 'The Guide took too long to respond. Please try again.' }, 504); }
   finally { clearTimeout(timeout); }
   if (!upstream.ok) {

@@ -12,6 +12,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   const imageInput = document.querySelector('#source-image');
   const imageNote = document.querySelector('#image-note');
   const imageStatus = document.querySelector('#image-status');
+  const audioInput = document.querySelector('#source-audio');
+  const audioNote = document.querySelector('#audio-note');
+  const audioStatus = document.querySelector('#audio-status');
+  const listenAudioButton = document.querySelector('#listen-audio');
   const messages = document.querySelector('#messages');
   const thinking = document.querySelector('#thinking');
   const formError = document.querySelector('#basics-error');
@@ -33,11 +37,12 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   const lyricsFile = document.querySelector('#lyrics-file');
   const fileStatus = document.querySelector('#file-status');
   const clearLyricsButton = document.querySelector('#clear-lyrics');
-  const state = { basics: null, source: null, messages: [], pendingImages: [], pending: false, brief: null, briefApproved: false, briefPending: false, canonLocked: false };
+  const state = { basics: null, source: null, messages: [], pendingImages: [], listeningRecord: null, audioHash: '', pending: false, brief: null, briefApproved: false, briefPending: false, canonLocked: false };
   const SOURCE_LIMITS = { track_list: 20000, lyrics: 100000, other_material: 50000 };
   const MAX_LOCAL_FILE_BYTES = 25 * 1024 * 1024;
   const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
   const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  const MAX_AUDIO_BYTES = 12 * 1024 * 1024;
   const VISION_TRIGGER = 'i think i know what this record wants to be';
   const BRIEF_TRIGGER = 'i think we have it. i’m ready to turn this into your lpx creative brief.';
 
@@ -49,6 +54,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     sendButton.disabled = !canWrite;
     imageInput.disabled = !canWrite;
     imageNote.disabled = !canWrite;
+    audioInput.disabled = !canWrite;
+    audioNote.disabled = !canWrite;
+    listenAudioButton.disabled = !canWrite || !audioInput.files?.[0];
     thinking.hidden = !busy;
     if (canWrite) messageInput.focus({ preventScroll: true });
   }
@@ -160,7 +168,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     hideError();
     setBusy(true);
     try {
-      const response = await fetch('/api/guide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ basics: state.basics, source: state.source, messages: state.messages, images: state.pendingImages }) });
+      const response = await fetch('/api/guide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ basics: state.basics, source: state.source, messages: state.messages, images: state.pendingImages, listeningRecord: state.listeningRecord }) });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload?.message) throw new Error(payload?.error || 'The Guide could not respond just now. Please try again.');
       state.messages.push({ role: 'assistant', text: payload.message });
@@ -203,6 +211,29 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     const file = imageInput.files?.[0];
     const error = validateImageFile(file);
     imageStatus.textContent = error || (file ? `${file.name} ready to send.` : 'JPEG, PNG, or WebP · up to 4 MB');
+  });
+  function validateAudioFile(file) {
+    if (!file) return 'Choose an MP3 first.';
+    if (file.type !== 'audio/mpeg' && !file.name.toLowerCase().endsWith('.mp3')) return 'Choose an MP3 recording.';
+    if (!file.size) return 'That recording is empty. Please choose another MP3.';
+    if (file.size > MAX_AUDIO_BYTES) return 'That recording is too large. Please choose an MP3 under 12 MB.';
+    return '';
+  }
+  function audioDuration(file) { return new Promise(resolve => { const url = URL.createObjectURL(file); const probe = document.createElement('audio'); probe.preload = 'metadata'; probe.onloadedmetadata = () => { const seconds = Number.isFinite(probe.duration) ? Math.round(probe.duration) : 0; URL.revokeObjectURL(url); resolve(seconds ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` : ''); }; probe.onerror = () => { URL.revokeObjectURL(url); resolve(''); }; probe.src = url; }); }
+  async function audioHash(file) { const bytes = await file.arrayBuffer(); const hash = await crypto.subtle.digest('SHA-256', bytes); return [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, '0')).join(''); }
+  function readAudioFile(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('That recording could not be read.')); reader.onerror = () => reject(new Error('That recording could not be read.')); reader.readAsDataURL(file); }); }
+  audioInput.addEventListener('change', () => { const file = audioInput.files?.[0]; const error = validateAudioFile(file); audioStatus.textContent = error || `${file.name} ready to listen.`; listenAudioButton.disabled = Boolean(error) || !file || state.pending; });
+  listenAudioButton.addEventListener('click', async () => {
+    const file = audioInput.files?.[0]; const error = validateAudioFile(file); if (error || state.pending) { audioStatus.textContent = error; return; }
+    try {
+      setBusy(true); audioStatus.textContent = 'Listening to the recording…';
+      const [hash, duration, dataUrl] = await Promise.all([audioHash(file), audioDuration(file), readAudioFile(file)]);
+      if (state.listeningRecord && state.audioHash === hash) { audioStatus.textContent = 'Recording heard.'; return; }
+      const response = await fetch('/api/audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: file.name.slice(0, 200), note: clean(audioNote.value).slice(0, 1000), duration, contentHash: hash, dataUrl }) });
+      const payload = await response.json().catch(() => null); if (!response.ok || !payload?.record) throw new Error(payload?.error || 'The recording could not be heard just now. Please retry.');
+      state.listeningRecord = payload.record; state.audioHash = hash; state.messages.push({ role: 'user', text: `[AUDIO SOURCE: ${file.name}]${audioNote.value.trim() ? `\nContext: ${audioNote.value.trim()}` : ''}` });
+      addMessage('artist', `[AUDIO SOURCE: ${file.name}]`); audioInput.value = ''; audioNote.value = ''; audioStatus.textContent = 'Recording heard.';
+    } catch (issue) { audioStatus.textContent = issue.message || 'The recording could not be heard. Please retry.'; } finally { setBusy(false); }
   });
   messageForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -358,6 +389,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   downloadConversationButton.addEventListener('click', downloadConversation);
   startOverButton.addEventListener('click', () => {
     if (!window.confirm('Start over? This clears this browser-only Guide conversation.')) return;
-    state.basics = null; state.source = null; state.messages = []; state.pendingImages = []; state.brief = null; state.briefApproved = false; state.canonLocked = false; messages.replaceChildren(); briefContent.replaceChildren(); briefArtifact.hidden = true; briefError.hidden = true; updateExportAvailability(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); messageForm.reset(); imageStatus.textContent = 'JPEG, PNG, or WebP · up to 4 MB'; fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
+    state.basics = null; state.source = null; state.messages = []; state.pendingImages = []; state.listeningRecord = null; state.audioHash = ''; state.brief = null; state.briefApproved = false; state.canonLocked = false; messages.replaceChildren(); briefContent.replaceChildren(); briefArtifact.hidden = true; briefError.hidden = true; updateExportAvailability(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); messageForm.reset(); imageStatus.textContent = 'JPEG, PNG, or WebP · up to 4 MB'; audioStatus.textContent = 'MP3 · up to 12 MB'; fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
   });
 })();

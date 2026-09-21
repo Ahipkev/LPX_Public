@@ -81,6 +81,8 @@
         <textarea id="artist-message" name="message" maxlength="5000" rows="4" placeholder="Say what’s on your mind about the record." disabled></textarea>
         <div class="composer-attachment"><label class="text-button" for="source-image">ADD IMAGE / ARTWORK</label><input id="source-image" type="file" accept="image/jpeg,image/png,image/webp"><p id="image-status" aria-live="polite">JPEG, PNG, or WebP · up to 4 MB</p></div>
         <textarea id="image-note" class="image-note" maxlength="1000" rows="2" placeholder="Optional image context — what is this, or what role should it play?"></textarea>
+        <div class="composer-attachment audio-attachment"><label class="text-button" for="source-audio">ADD RECORDING</label><input id="source-audio" type="file" accept="audio/mpeg,.mp3"><p id="audio-status" aria-live="polite">MP3 · up to 12 MB</p><button id="listen-audio" class="text-button" type="button" disabled>LISTEN TO RECORDING</button></div>
+        <textarea id="audio-note" class="image-note" maxlength="1000" rows="2" placeholder="Optional recording context — what should the Guide know?" disabled></textarea>
         <div class="message-controls"><p>ENTER TO SEND · SHIFT + ENTER FOR A NEW LINE</p><button id="send" class="button" type="submit" disabled>SEND</button></div>
       </form>
     </section>
