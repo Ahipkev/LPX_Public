@@ -15,7 +15,7 @@ function contextFrom(data) {
   return `Artist: ${basics.name}\nRecord: ${basics.record}\nMusic: ${basics.music}\nStatus: ${basics.stage}\n\nConversation:\n${data.messages.map(item => `${item.role === 'user' ? 'Artist' : 'Guide'}: ${item.text}`).join('\n\n')}\n\nSource material:\n${['track_list', 'lyrics', 'other_material'].map(key => source[key] ? `${key}: ${String(source[key]).slice(0, key === 'lyrics' ? 100000 : 50000)}` : '').filter(Boolean).join('\n\n')}`;
 }
 async function ask(context, prompt, maxOutputTokens) {
-  const response = await fetch('https://api.openai.com/v1/responses', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.env.OPENAI_API_KEY}` }, body: JSON.stringify({ model: 'gpt-5.6-terra', store: false, reasoning: { effort: 'medium' }, max_output_tokens: maxOutputTokens, instructions: 'You create a faithful LPX Creative Brief from an approved conversation. Do not restart discovery, change approved decisions, or expose process. Return only valid JSON matching the requested shape.', input: prompt }) });
+  const response = await fetch('https://api.openai.com/v1/responses', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.env.LPX_GUIDE_KEY}` }, body: JSON.stringify({ model: 'gpt-5.6-terra', store: false, reasoning: { effort: 'medium' }, max_output_tokens: maxOutputTokens, instructions: 'You create a faithful LPX Creative Brief from an approved conversation. Do not restart discovery, change approved decisions, or expose process. Return only valid JSON matching the requested shape.', input: prompt }) });
   if (!response.ok) throw new Error(response.status === 429 ? 'The Guide is busy. Please retry.' : 'The Creative Brief could not be prepared. Please retry.');
   const body = await response.json();
   if (body.status === 'incomplete') throw new Error('The Creative Brief needs another pass. Please retry.');
@@ -30,7 +30,7 @@ export async function onRequest(context) {
   if (length > MAX_REQUEST_CHARS) return json({ error: 'This creative session is too large to prepare a brief in the current browser-only version.' }, 413);
   let data; try { data = await context.request.json(); } catch { return json({ error: 'The Creative Brief request could not be read.' }, 400); }
   if (JSON.stringify(data).length > MAX_REQUEST_CHARS) return json({ error: 'This creative session is too large to prepare a brief in the current browser-only version.' }, 413);
-  if (!context.env.OPENAI_API_KEY) return json({ error: 'The Guide is not configured yet.' }, 503);
+  if (!context.env.LPX_GUIDE_KEY) return json({ error: 'The Guide is not configured yet.' }, 503);
   const session = contextFrom(data); if (!session) return json({ error: 'The Creative Brief needs the current Guide conversation.' }, 400);
   try {
     if (data.action === 'plan') {
