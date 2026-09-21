@@ -106,9 +106,12 @@ export async function onRequest(context) {
   if (!upstream.ok) {
     let diagnostic;
     if (context.request.headers.get('x-lpx-diagnostic') === '1') {
-      const provider = await upstream.json().catch(() => null);
+      const providerText = await upstream.text().catch(() => '');
+      let provider; try { provider = JSON.parse(providerText); } catch { provider = null; }
       const error = provider?.error || provider || {};
-      diagnostic = { upstreamStatus: upstream.status, providerType: typeof error.type === 'string' ? error.type.slice(0, 120) : null, providerCode: typeof error.code === 'string' ? error.code.slice(0, 120) : null, providerMessage: typeof error === 'string' ? error.slice(0, 500) : typeof error.message === 'string' ? error.message.slice(0, 500) : null };
+      const detail = [typeof error === 'string' ? error : '', typeof error.type === 'string' ? error.type : '', typeof error.code === 'string' ? error.code : '', typeof error.message === 'string' ? error.message : '', providerText].join(' ').toLowerCase();
+      const category = /permission|scope|not authorized/.test(detail) ? 'permission' : /api.?key|authentication|unauthorized/.test(detail) ? 'authentication' : /model|not found|does not exist/.test(detail) ? 'model-access' : /parameter|invalid request|unsupported|malformed/.test(detail) ? 'request-format' : 'unclassified-upstream-400';
+      diagnostic = { upstreamStatus: upstream.status, category };
     }
     if (upstream.status === 429) return json({ error: 'The Guide is receiving a lot of attention right now. Please wait a moment and retry.' }, 429);
     if (upstream.status === 401 || upstream.status === 403) return json({ error: 'The Guide is not configured correctly yet. Please try again later.' }, 503);
