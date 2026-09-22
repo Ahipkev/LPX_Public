@@ -3,6 +3,23 @@ const AUDIO_TYPE = 'audio/mpeg';
 const SCHEMA_VERSION = 'lpx-listening-record/0.1';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com';
 const GEMINI_MODEL = 'gemini-3.8-flash';
+const LISTENING_RECORD_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    timeline: { type: 'array', minItems: 3, maxItems: 30, items: { type: 'object', properties: { start: { type: 'string' }, end: { type: 'string' }, label: { type: 'string' }, observation: { type: 'string' }, change: { type: 'string' }, energy: { type: 'string' }, confidence: { type: 'string', enum: ['high', 'medium', 'low'] } }, required: ['start', 'end', 'observation', 'change', 'energy', 'confidence'] } },
+    musical_development: { type: 'array', maxItems: 16, items: { type: 'string' } },
+    texture: { type: 'array', maxItems: 16, items: { type: 'string' } },
+    significant_events: { type: 'array', minItems: 3, maxItems: 12, items: { type: 'object', properties: { time: { type: 'string' }, event: { type: 'string' }, change: { type: 'string' }, confidence: { type: 'string', enum: ['high', 'medium', 'low'] } }, required: ['time', 'event', 'change', 'confidence'] } },
+    beginning: { type: 'string' },
+    final_minute: { type: 'string' },
+    final_thirty_seconds: { type: 'string' },
+    ending: { type: 'string' },
+    observations: { type: 'array', maxItems: 20, items: { type: 'string' } },
+    interpretations: { type: 'array', maxItems: 16, items: { type: 'string' } },
+    uncertainties: { type: 'array', maxItems: 16, items: { type: 'string' } }
+  },
+  required: ['timeline', 'musical_development', 'texture', 'significant_events', 'beginning', 'final_minute', 'final_thirty_seconds', 'ending', 'observations', 'interpretations', 'uncertainties']
+};
 
 const LISTENING_PROMPT = `Listen to this MP3 as source material for a musician's creative conversation. Return JSON only. Report sound, not an imagined visual treatment or artist intent. Timestamps are approximate perceptual locations, never exact synchronization points. Separate audible observation from interpretation. Do not claim mechanisms such as sidechain compression, oscillator type, plugin, hardware, or processing chain unless directly established by sound; describe the audible result instead.\n\nReturn this exact shape: {"timeline":[{"start":"M:SS","end":"M:SS or empty","label":"optional concise label","observation":"audible fact","change":"what changed from preceding material","energy":"concise audible energy/density behavior","confidence":"high|medium|low"}],"musical_development":["compact audible observation"],"texture":["compact audible observation"],"significant_events":[{"time":"M:SS","event":"audible event","change":"why it differs from preceding material","confidence":"high|medium|low"}],"beginning":"how it establishes itself","final_minute":"development in the final minute, or empty if not applicable","final_thirty_seconds":"behavior in final 30 seconds, or empty if not applicable","ending":"fade, cut, resolution, decay, or continuation","observations":["high-confidence audible fact"],"interpretations":["clearly provisional possible reading"],"uncertainties":["what audio alone does not establish"]}. Include meaningful beginning-to-end coverage. Keep every field compact.`;
 
@@ -112,7 +129,7 @@ export async function onRequest(context) {
     if (usableFile?.response) { logStageFailure(stage, usableFile.response); return providerError(usableFile.response); }
     if (!usableFile?.uri) { logStageFailure(stage); return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502); }
     stage = 'generate_content';
-    const upstream = await fetch(`${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent`, { method: 'POST', signal: controller.signal, headers: { ...geminiHeaders(context.env.LPX_GEMINI_PRODUCTION_KEY), 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: LISTENING_PROMPT + (data.note.trim() ? `\n\nArtist-provided context (authoritative; do not treat it as audio evidence): ${data.note.trim()}` : '') }, { file_data: { mime_type: usableFile.mimeType || AUDIO_TYPE, file_uri: usableFile.uri } }] }] }) });
+    const upstream = await fetch(`${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent`, { method: 'POST', signal: controller.signal, headers: { ...geminiHeaders(context.env.LPX_GEMINI_PRODUCTION_KEY), 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: LISTENING_PROMPT + (data.note.trim() ? `\n\nArtist-provided context (authoritative; do not treat it as audio evidence): ${data.note.trim()}` : '') }, { file_data: { mime_type: usableFile.mimeType || AUDIO_TYPE, file_uri: usableFile.uri } }] }], generationConfig: { responseFormat: { text: { mimeType: 'application/json', schema: LISTENING_RECORD_RESPONSE_SCHEMA } } } }) });
     if (!upstream.ok) { logStageFailure(stage, upstream); return providerError(upstream); }
     let body; try { body = await upstream.json(); } catch (error) { logStageFailure(stage, null, error); return json({ error: 'The recording returned an unreadable listening result. Please retry.' }, 502); }
     const responseText = body?.candidates?.[0]?.content?.parts?.map(part => typeof part?.text === 'string' ? part.text : '').join('\n') || '';
