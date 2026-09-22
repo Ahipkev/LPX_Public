@@ -19,6 +19,18 @@ function safeStatus(value) { return Number.isInteger(value) && value >= 100 && v
 function logStageFailure(stage, response, error) {
   console.log(`LPX_AUDIO_STAGE_FAILURE stage=${stage} status=${safeStatus(response?.status)} name=${safeFetchDiagnostic(error?.name, 'name')} message=${safeFetchDiagnostic(error?.message, 'message')}`);
 }
+async function logUploadInitProviderFailure(response) {
+  let providerCode = 'none';
+  let providerStatus = '[suppressed]';
+  let providerMessage = '[suppressed]';
+  try {
+    const error = (await response.json())?.error;
+    providerCode = safeStatus(error?.code);
+    providerStatus = safeFetchDiagnostic(error?.status, 'name');
+    providerMessage = safeFetchDiagnostic(error?.message, 'message');
+  } catch {}
+  console.log(`LPX_AUDIO_STAGE_FAILURE stage=upload_init status=${safeStatus(response?.status)} name=[suppressed] message=[suppressed] provider_code=${providerCode} provider_status=${providerStatus} provider_message=${providerMessage}`);
+}
 function geminiHeaders(apiKey) { return { 'x-goog-api-key': apiKey }; }
 function providerError(response) { return json({ error: response.status === 401 || response.status === 403 ? 'Recording listening is not configured correctly yet.' : 'The recording could not be heard just now. Your conversation is still here; please retry.' }, response.status === 401 || response.status === 403 ? 503 : 502); }
 function audioBytes(base64) {
@@ -85,7 +97,7 @@ export async function onRequest(context) {
   try {
     const bytes = audioBytes(audio.base64);
     const uploadStart = await fetch(`${GEMINI_API_BASE}/upload/v1beta/files`, { method: 'POST', signal: controller.signal, headers: { ...geminiHeaders(context.env.GEMINI_API_KEY), 'Content-Type': 'application/json', 'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start', 'X-Goog-Upload-Header-Content-Length': String(audio.bytes), 'X-Goog-Upload-Header-Content-Type': AUDIO_TYPE }, body: JSON.stringify({ file: { display_name: 'LPX temporary audio' } }) });
-    if (!uploadStart.ok) { logStageFailure(stage, uploadStart); return providerError(uploadStart); }
+    if (!uploadStart.ok) { await logUploadInitProviderFailure(uploadStart); return providerError(uploadStart); }
     const uploadUrl = uploadStart.headers.get('x-goog-upload-url');
     if (!uploadUrl || !uploadUrl.startsWith('https://')) { logStageFailure(stage); return json({ error: 'The recording could not be heard just now. Your conversation is still here; please retry.' }, 502); }
     stage = 'upload_bytes';
