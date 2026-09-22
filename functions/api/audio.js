@@ -15,8 +15,9 @@ function safeFetchDiagnostic(value, kind) {
   if (kind === 'name') return /^[A-Za-z][A-Za-z0-9_.:-]{0,79}$/.test(normalized) ? normalized : '[suppressed]';
   return /(?:authorization|bearer|api[ _-]?key|secret|token|headers?|request[ _-]?(?:body|headers?)|data:audio|base64|AIza|\bsk-[A-Za-z0-9_-]+)/i.test(normalized) ? '[suppressed]' : normalized;
 }
-function logUnexpectedFetchRejection(error) {
-  console.log(`LPX_AUDIO_UPSTREAM_FETCH_REJECTION name=${safeFetchDiagnostic(error?.name, 'name')} message=${safeFetchDiagnostic(error?.message, 'message')}`);
+function safeStatus(value) { return Number.isInteger(value) && value >= 100 && value <= 599 ? String(value) : 'none'; }
+function logStageFailure(stage, response, error) {
+  console.log(`LPX_AUDIO_STAGE_FAILURE stage=${stage} status=${safeStatus(response?.status)} name=${safeFetchDiagnostic(error?.name, 'name')} message=${safeFetchDiagnostic(error?.message, 'message')}`);
 }
 function geminiHeaders(apiKey) { return { 'x-goog-api-key': apiKey }; }
 function providerError(response) { return json({ error: response.status === 401 || response.status === 403 ? 'Recording listening is not configured correctly yet.' : 'The recording could not be heard just now. Your conversation is still here; please retry.' }, response.status === 401 || response.status === 403 ? 503 : 502); }
@@ -49,9 +50,9 @@ async function waitForFile(file, apiKey, signal) {
 async function deleteTemporaryFile(name, apiKey, signal) {
   try {
     const response = await fetch(fileUrl(name), { method: 'DELETE', headers: geminiHeaders(apiKey), signal });
-    if (!response.ok && !signal.aborted) console.log(`LPX_AUDIO_FILE_CLEANUP_FAILURE status=${response.status}`);
-  } catch {
-    if (!signal.aborted) console.log('LPX_AUDIO_FILE_CLEANUP_FAILURE');
+    if (!response.ok && !signal.aborted) logStageFailure('cleanup', response);
+  } catch (error) {
+    if (!signal.aborted) logStageFailure('cleanup', null, error);
   }
 }
 function validTime(value) { return typeof value === 'string' && (value === '' || /^\d{1,2}:\d{2}$/.test(value)); }
@@ -80,30 +81,35 @@ export async function onRequest(context) {
   const audio = parseDataUrl(data.dataUrl); if (!audio) return json({ error: 'Choose a non-empty MP3 under 12 MB.' }, 400);
   const controller = new AbortController(); let timedOut = false; const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 300000);
   let temporaryFileName = null;
+  let stage = 'upload_init';
   try {
     const bytes = audioBytes(audio.base64);
     const uploadStart = await fetch(`${GEMINI_API_BASE}/upload/v1beta/files`, { method: 'POST', signal: controller.signal, headers: { ...geminiHeaders(context.env.GEMINI_API_KEY), 'Content-Type': 'application/json', 'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start', 'X-Goog-Upload-Header-Content-Length': String(audio.bytes), 'X-Goog-Upload-Header-Content-Type': AUDIO_TYPE }, body: JSON.stringify({ file: { display_name: 'LPX temporary audio' } }) });
-    if (!uploadStart.ok) return providerError(uploadStart);
+    if (!uploadStart.ok) { logStageFailure(stage, uploadStart); return providerError(uploadStart); }
     const uploadUrl = uploadStart.headers.get('x-goog-upload-url');
-    if (!uploadUrl || !uploadUrl.startsWith('https://')) return json({ error: 'The recording could not be heard just now. Your conversation is still here; please retry.' }, 502);
+    if (!uploadUrl || !uploadUrl.startsWith('https://')) { logStageFailure(stage); return json({ error: 'The recording could not be heard just now. Your conversation is still here; please retry.' }, 502); }
+    stage = 'upload_bytes';
     const upload = await fetch(uploadUrl, { method: 'POST', signal: controller.signal, headers: { 'Content-Type': AUDIO_TYPE, 'Content-Length': String(audio.bytes), 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' }, body: bytes });
-    if (!upload.ok) return providerError(upload);
+    if (!upload.ok) { logStageFailure(stage, upload); return providerError(upload); }
     const uploaded = await upload.json();
     const file = uploaded?.file;
-    if (!file?.name || !file?.uri) return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502);
+    if (!file?.name || !file?.uri) { logStageFailure(stage); return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502); }
     temporaryFileName = file.name;
+    stage = 'file_processing';
     const usableFile = await waitForFile(file, context.env.GEMINI_API_KEY, controller.signal);
-    if (usableFile?.response) return providerError(usableFile.response);
-    if (!usableFile?.uri) return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502);
+    if (usableFile?.response) { logStageFailure(stage, usableFile.response); return providerError(usableFile.response); }
+    if (!usableFile?.uri) { logStageFailure(stage); return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502); }
+    stage = 'generate_content';
     const upstream = await fetch(`${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent`, { method: 'POST', signal: controller.signal, headers: { ...geminiHeaders(context.env.GEMINI_API_KEY), 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: LISTENING_PROMPT + (data.note.trim() ? `\n\nArtist-provided context (authoritative; do not treat it as audio evidence): ${data.note.trim()}` : '') }, { file_data: { mime_type: usableFile.mimeType || AUDIO_TYPE, file_uri: usableFile.uri } }] }] }) });
-    if (!upstream.ok) return providerError(upstream);
-    let body; try { body = await upstream.json(); } catch { return json({ error: 'The recording returned an unreadable listening result. Please retry.' }, 502); }
+    if (!upstream.ok) { logStageFailure(stage, upstream); return providerError(upstream); }
+    let body; try { body = await upstream.json(); } catch (error) { logStageFailure(stage, null, error); return json({ error: 'The recording returned an unreadable listening result. Please retry.' }, 502); }
     const responseText = body?.candidates?.[0]?.content?.parts?.map(part => typeof part?.text === 'string' ? part.text : '').join('\n') || '';
-    let parsed; try { parsed = JSON.parse(responseText); } catch { return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502); }
-    const record = validateRecord(parsed); if (!record) return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502);
+    stage = 'listening_record_validation';
+    let parsed; try { parsed = JSON.parse(responseText); } catch (error) { logStageFailure(stage, null, error); return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502); }
+    const record = validateRecord(parsed); if (!record) { logStageFailure(stage); return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502); }
     return json({ record: { ...record, source: { display_name: data.name.trim(), content_hash: data.contentHash.toLowerCase(), duration: clean(data.duration || '', 40) || '', analysis_provider: 'Gemini', analysis_model: body.modelVersion || GEMINI_MODEL }, provenance: { usage: body.usageMetadata || null } } });
   } catch (error) {
-    if (!timedOut) logUnexpectedFetchRejection(error);
+    if (!timedOut) logStageFailure(stage, null, error);
     return json({ error: timedOut ? 'Listening took too long. Your conversation is still here; please retry the recording.' : 'The recording service could not be reached just now. Your conversation is still here; please retry the recording.' }, timedOut ? 504 : 502);
   } finally {
     if (temporaryFileName) await deleteTemporaryFile(temporaryFileName, context.env.GEMINI_API_KEY, controller.signal);
