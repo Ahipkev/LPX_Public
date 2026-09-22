@@ -223,8 +223,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   async function audioHash(file) { const bytes = await file.arrayBuffer(); const hash = await crypto.subtle.digest('SHA-256', bytes); return [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, '0')).join(''); }
   function readAudioFile(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('That recording could not be read.')); reader.onerror = () => reject(new Error('That recording could not be read.')); reader.readAsDataURL(file); }); }
   audioInput.addEventListener('change', () => { const file = audioInput.files?.[0]; const error = validateAudioFile(file); audioStatus.textContent = error || `${file.name} ready to listen.`; listenAudioButton.disabled = Boolean(error) || !file || state.pending; });
-  listenAudioButton.addEventListener('click', async () => {
-    const file = audioInput.files?.[0]; const error = validateAudioFile(file); if (error || state.pending) { audioStatus.textContent = error; return; }
+  async function listenToRecording(file) {
+    const error = validateAudioFile(file); if (error || state.pending) throw new Error(error || 'The Guide is busy. Please wait a moment.');
     try {
       setBusy(true); audioStatus.textContent = 'Listening to the recording…';
       const [hash, duration, dataUrl] = await Promise.all([audioHash(file), audioDuration(file), readAudioFile(file)]);
@@ -233,15 +233,22 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
       const payload = await response.json().catch(() => null); if (!response.ok || !payload?.record) throw new Error(payload?.error || 'The recording could not be heard just now. Please retry.');
       state.listeningRecord = payload.record; state.audioHash = hash; state.messages.push({ role: 'user', text: `[AUDIO SOURCE: ${file.name}]${audioNote.value.trim() ? `\nContext: ${audioNote.value.trim()}` : ''}` });
       addMessage('artist', `[AUDIO SOURCE: ${file.name}]`); audioInput.value = ''; audioNote.value = ''; audioStatus.textContent = 'Recording heard.';
-    } catch (issue) { audioStatus.textContent = issue.message || 'The recording could not be heard. Please retry.'; } finally { setBusy(false); }
+    } catch (issue) { audioStatus.textContent = issue.message || 'The recording could not be heard. Please retry.'; throw issue; } finally { setBusy(false); }
+  }
+  listenAudioButton.addEventListener('click', async () => {
+    const file = audioInput.files?.[0]; const error = validateAudioFile(file); if (error || state.pending) { audioStatus.textContent = error; return; }
+    try { await listenToRecording(file); } catch {}
   });
   messageForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const text = clean(messageInput.value);
     const file = imageInput.files?.[0];
-    if (state.pending || (!text && !file)) return;
+    const audioFile = audioInput.files?.[0];
+    if (state.pending || (!text && !file && !audioFile)) return;
     const error = validateImageFile(file);
     if (file && error) { imageStatus.textContent = error; return; }
+    const audioError = audioFile && validateAudioFile(audioFile);
+    if (audioError) { audioStatus.textContent = audioError; return; }
     try {
       if (state.brief && !state.canonLocked) { state.brief = null; briefArtifact.hidden = true; }
       const generateBrief = text && state.briefApproved && isBriefApproval(text) && !file;
@@ -256,13 +263,15 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
         state.messages.push({ role: 'user', text: attachmentText(image) });
         addImageMessage(image);
       }
+      if (audioFile) await listenToRecording(audioFile);
       imageInput.value = '';
       imageNote.value = '';
       messageInput.value = '';
       imageStatus.textContent = file ? 'Image added. The Guide is looking at it now.' : 'JPEG, PNG, or WebP · up to 4 MB';
       if (generateBrief) { await generateCreativeBrief(); } else { await askGuide(); }
     } catch (issue) {
-      imageStatus.textContent = issue.message || 'That image could not be added. Please try another file.';
+      if (audioFile) audioStatus.textContent = issue.message || 'The recording could not be heard. Please retry.';
+      else imageStatus.textContent = issue.message || 'That image could not be added. Please try another file.';
     }
   });
   function showBriefError(message) { briefError.querySelector('p').textContent = message; briefError.hidden = false; }
