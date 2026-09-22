@@ -87,7 +87,7 @@ function validateRecord(value) {
 export async function onRequest(context) {
   if (context.request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
   if (!context.request.headers.get('content-type')?.toLowerCase().includes('application/json')) return json({ error: 'Send a JSON request.' }, 415);
-  if (!context.env.GEMINI_API_KEY) return json({ error: 'Recording listening is not configured yet. Please try again after the site administrator adds its server-side key.' }, 503);
+  if (!context.env.LPX_GEMINI_PRODUCTION_KEY) return json({ error: 'Recording listening is not configured yet. Please try again after the site administrator adds its server-side key.' }, 503);
   let data; try { data = await context.request.json(); } catch { return json({ error: 'The recording could not be read. Please try again.' }, 400); }
   if (!data || !clean(data.name, 200) || typeof data.note !== 'string' || data.note.length > 1000 || !/^[a-f0-9]{64}$/i.test(data.contentHash || '')) return json({ error: 'The recording details are not valid. Please try again.' }, 400);
   const audio = parseDataUrl(data.dataUrl); if (!audio) return json({ error: 'Choose a non-empty MP3 under 12 MB.' }, 400);
@@ -96,7 +96,7 @@ export async function onRequest(context) {
   let stage = 'upload_init';
   try {
     const bytes = audioBytes(audio.base64);
-    const uploadStart = await fetch(`${GEMINI_API_BASE}/upload/v1beta/files`, { method: 'POST', signal: controller.signal, headers: { ...geminiHeaders(context.env.GEMINI_API_KEY), 'Content-Type': 'application/json', 'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start', 'X-Goog-Upload-Header-Content-Length': String(audio.bytes), 'X-Goog-Upload-Header-Content-Type': AUDIO_TYPE }, body: JSON.stringify({ file: { display_name: 'LPX temporary audio' } }) });
+    const uploadStart = await fetch(`${GEMINI_API_BASE}/upload/v1beta/files`, { method: 'POST', signal: controller.signal, headers: { ...geminiHeaders(context.env.LPX_GEMINI_PRODUCTION_KEY), 'Content-Type': 'application/json', 'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start', 'X-Goog-Upload-Header-Content-Length': String(audio.bytes), 'X-Goog-Upload-Header-Content-Type': AUDIO_TYPE }, body: JSON.stringify({ file: { display_name: 'LPX temporary audio' } }) });
     if (!uploadStart.ok) { await logUploadInitProviderFailure(uploadStart); return providerError(uploadStart); }
     const uploadUrl = uploadStart.headers.get('x-goog-upload-url');
     if (!uploadUrl || !uploadUrl.startsWith('https://')) { logStageFailure(stage); return json({ error: 'The recording could not be heard just now. Your conversation is still here; please retry.' }, 502); }
@@ -108,11 +108,11 @@ export async function onRequest(context) {
     if (!file?.name || !file?.uri) { logStageFailure(stage); return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502); }
     temporaryFileName = file.name;
     stage = 'file_processing';
-    const usableFile = await waitForFile(file, context.env.GEMINI_API_KEY, controller.signal);
+    const usableFile = await waitForFile(file, context.env.LPX_GEMINI_PRODUCTION_KEY, controller.signal);
     if (usableFile?.response) { logStageFailure(stage, usableFile.response); return providerError(usableFile.response); }
     if (!usableFile?.uri) { logStageFailure(stage); return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502); }
     stage = 'generate_content';
-    const upstream = await fetch(`${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent`, { method: 'POST', signal: controller.signal, headers: { ...geminiHeaders(context.env.GEMINI_API_KEY), 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: LISTENING_PROMPT + (data.note.trim() ? `\n\nArtist-provided context (authoritative; do not treat it as audio evidence): ${data.note.trim()}` : '') }, { file_data: { mime_type: usableFile.mimeType || AUDIO_TYPE, file_uri: usableFile.uri } }] }] }) });
+    const upstream = await fetch(`${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent`, { method: 'POST', signal: controller.signal, headers: { ...geminiHeaders(context.env.LPX_GEMINI_PRODUCTION_KEY), 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: LISTENING_PROMPT + (data.note.trim() ? `\n\nArtist-provided context (authoritative; do not treat it as audio evidence): ${data.note.trim()}` : '') }, { file_data: { mime_type: usableFile.mimeType || AUDIO_TYPE, file_uri: usableFile.uri } }] }] }) });
     if (!upstream.ok) { logStageFailure(stage, upstream); return providerError(upstream); }
     let body; try { body = await upstream.json(); } catch (error) { logStageFailure(stage, null, error); return json({ error: 'The recording returned an unreadable listening result. Please retry.' }, 502); }
     const responseText = body?.candidates?.[0]?.content?.parts?.map(part => typeof part?.text === 'string' ? part.text : '').join('\n') || '';
@@ -124,7 +124,7 @@ export async function onRequest(context) {
     if (!timedOut) logStageFailure(stage, null, error);
     return json({ error: timedOut ? 'Listening took too long. Your conversation is still here; please retry the recording.' : 'The recording service could not be reached just now. Your conversation is still here; please retry the recording.' }, timedOut ? 504 : 502);
   } finally {
-    if (temporaryFileName) await deleteTemporaryFile(temporaryFileName, context.env.GEMINI_API_KEY, controller.signal);
+    if (temporaryFileName) await deleteTemporaryFile(temporaryFileName, context.env.LPX_GEMINI_PRODUCTION_KEY, controller.signal);
     clearTimeout(timeout);
   }
 }
