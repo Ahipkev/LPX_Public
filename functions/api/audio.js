@@ -1,6 +1,8 @@
 const MAX_AUDIO_BYTES = 12 * 1024 * 1024;
 const AUDIO_TYPE = 'audio/mpeg';
 const SCHEMA_VERSION = 'lpx-listening-record/0.1';
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com';
+const GEMINI_MODEL = 'gemini-3.8-flash';
 
 const LISTENING_PROMPT = `Listen to this MP3 as source material for a musician's creative conversation. Return JSON only. Report sound, not an imagined visual treatment or artist intent. Timestamps are approximate perceptual locations, never exact synchronization points. Separate audible observation from interpretation. Do not claim mechanisms such as sidechain compression, oscillator type, plugin, hardware, or processing chain unless directly established by sound; describe the audible result instead.\n\nReturn this exact shape: {"timeline":[{"start":"M:SS","end":"M:SS or empty","label":"optional concise label","observation":"audible fact","change":"what changed from preceding material","energy":"concise audible energy/density behavior","confidence":"high|medium|low"}],"musical_development":["compact audible observation"],"texture":["compact audible observation"],"significant_events":[{"time":"M:SS","event":"audible event","change":"why it differs from preceding material","confidence":"high|medium|low"}],"beginning":"how it establishes itself","final_minute":"development in the final minute, or empty if not applicable","final_thirty_seconds":"behavior in final 30 seconds, or empty if not applicable","ending":"fade, cut, resolution, decay, or continuation","observations":["high-confidence audible fact"],"interpretations":["clearly provisional possible reading"],"uncertainties":["what audio alone does not establish"]}. Include meaningful beginning-to-end coverage. Keep every field compact.`;
 
@@ -15,6 +17,42 @@ function safeFetchDiagnostic(value, kind) {
 }
 function logUnexpectedFetchRejection(error) {
   console.log(`LPX_AUDIO_UPSTREAM_FETCH_REJECTION name=${safeFetchDiagnostic(error?.name, 'name')} message=${safeFetchDiagnostic(error?.message, 'message')}`);
+}
+function geminiHeaders(apiKey) { return { 'x-goog-api-key': apiKey }; }
+function providerError(response) { return json({ error: response.status === 401 || response.status === 403 ? 'Recording listening is not configured correctly yet.' : 'The recording could not be heard just now. Your conversation is still here; please retry.' }, response.status === 401 || response.status === 403 ? 503 : 502); }
+function audioBytes(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+function fileUrl(name) { return `${GEMINI_API_BASE}/v1beta/${name.split('/').map(encodeURIComponent).join('/')}`; }
+function fileIsUsable(file) { return !file?.state || file.state === 'ACTIVE'; }
+function wait(milliseconds, signal) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(resolve, milliseconds);
+    signal.addEventListener('abort', () => { clearTimeout(timeout); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
+  });
+}
+async function waitForFile(file, apiKey, signal) {
+  let current = file;
+  while (!fileIsUsable(current)) {
+    if (current?.state === 'FAILED') return null;
+    await wait(1000, signal);
+    const response = await fetch(fileUrl(current?.name || ''), { headers: geminiHeaders(apiKey), signal });
+    if (!response.ok) return { response };
+    const body = await response.json();
+    current = body;
+  }
+  return current;
+}
+async function deleteTemporaryFile(name, apiKey, signal) {
+  try {
+    const response = await fetch(fileUrl(name), { method: 'DELETE', headers: geminiHeaders(apiKey), signal });
+    if (!response.ok && !signal.aborted) console.log(`LPX_AUDIO_FILE_CLEANUP_FAILURE status=${response.status}`);
+  } catch {
+    if (!signal.aborted) console.log('LPX_AUDIO_FILE_CLEANUP_FAILURE');
+  }
 }
 function validTime(value) { return typeof value === 'string' && (value === '' || /^\d{1,2}:\d{2}$/.test(value)); }
 function textList(value, max, limit = 1000) { return Array.isArray(value) && value.length <= max && value.every(item => clean(item, limit)); }
@@ -41,16 +79,34 @@ export async function onRequest(context) {
   if (!data || !clean(data.name, 200) || typeof data.note !== 'string' || data.note.length > 1000 || !/^[a-f0-9]{64}$/i.test(data.contentHash || '')) return json({ error: 'The recording details are not valid. Please try again.' }, 400);
   const audio = parseDataUrl(data.dataUrl); if (!audio) return json({ error: 'Choose a non-empty MP3 under 12 MB.' }, 400);
   const controller = new AbortController(); let timedOut = false; const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 300000);
-  let upstream;
+  let temporaryFileName = null;
   try {
-    upstream = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.env.GEMINI_API_KEY}` }, body: JSON.stringify({ model: 'gemini-3.8-flash', messages: [{ role: 'user', content: [{ type: 'text', text: LISTENING_PROMPT + (data.note.trim() ? `\n\nArtist-provided context (authoritative; do not treat it as audio evidence): ${data.note.trim()}` : '') }, { type: 'input_audio', input_audio: { data: audio.base64, format: 'mp3' } }] }] }) });
+    const bytes = audioBytes(audio.base64);
+    const uploadStart = await fetch(`${GEMINI_API_BASE}/upload/v1beta/files`, { method: 'POST', signal: controller.signal, headers: { ...geminiHeaders(context.env.GEMINI_API_KEY), 'Content-Type': 'application/json', 'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start', 'X-Goog-Upload-Header-Content-Length': String(audio.bytes), 'X-Goog-Upload-Header-Content-Type': AUDIO_TYPE }, body: JSON.stringify({ file: { display_name: 'LPX temporary audio' } }) });
+    if (!uploadStart.ok) return providerError(uploadStart);
+    const uploadUrl = uploadStart.headers.get('x-goog-upload-url');
+    if (!uploadUrl || !uploadUrl.startsWith('https://')) return json({ error: 'The recording could not be heard just now. Your conversation is still here; please retry.' }, 502);
+    const upload = await fetch(uploadUrl, { method: 'POST', signal: controller.signal, headers: { 'Content-Type': AUDIO_TYPE, 'Content-Length': String(audio.bytes), 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' }, body: bytes });
+    if (!upload.ok) return providerError(upload);
+    const uploaded = await upload.json();
+    const file = uploaded?.file;
+    if (!file?.name || !file?.uri) return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502);
+    temporaryFileName = file.name;
+    const usableFile = await waitForFile(file, context.env.GEMINI_API_KEY, controller.signal);
+    if (usableFile?.response) return providerError(usableFile.response);
+    if (!usableFile?.uri) return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502);
+    const upstream = await fetch(`${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent`, { method: 'POST', signal: controller.signal, headers: { ...geminiHeaders(context.env.GEMINI_API_KEY), 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: LISTENING_PROMPT + (data.note.trim() ? `\n\nArtist-provided context (authoritative; do not treat it as audio evidence): ${data.note.trim()}` : '') }, { file_data: { mime_type: usableFile.mimeType || AUDIO_TYPE, file_uri: usableFile.uri } }] }] }) });
+    if (!upstream.ok) return providerError(upstream);
+    let body; try { body = await upstream.json(); } catch { return json({ error: 'The recording returned an unreadable listening result. Please retry.' }, 502); }
+    const responseText = body?.candidates?.[0]?.content?.parts?.map(part => typeof part?.text === 'string' ? part.text : '').join('\n') || '';
+    let parsed; try { parsed = JSON.parse(responseText); } catch { return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502); }
+    const record = validateRecord(parsed); if (!record) return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502);
+    return json({ record: { ...record, source: { display_name: data.name.trim(), content_hash: data.contentHash.toLowerCase(), duration: clean(data.duration || '', 40) || '', analysis_provider: 'Gemini', analysis_model: body.modelVersion || GEMINI_MODEL }, provenance: { usage: body.usageMetadata || null } } });
   } catch (error) {
     if (!timedOut) logUnexpectedFetchRejection(error);
     return json({ error: timedOut ? 'Listening took too long. Your conversation is still here; please retry the recording.' : 'The recording service could not be reached just now. Your conversation is still here; please retry the recording.' }, timedOut ? 504 : 502);
-  } finally { clearTimeout(timeout); }
-  if (!upstream.ok) return json({ error: upstream.status === 401 || upstream.status === 403 ? 'Recording listening is not configured correctly yet.' : 'The recording could not be heard just now. Your conversation is still here; please retry.' }, upstream.status === 401 || upstream.status === 403 ? 503 : 502);
-  let body; try { body = await upstream.json(); } catch { return json({ error: 'The recording returned an unreadable listening result. Please retry.' }, 502); }
-  let parsed; try { parsed = JSON.parse(body?.choices?.[0]?.message?.content || ''); } catch { return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502); }
-  const record = validateRecord(parsed); if (!record) return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502);
-  return json({ record: { ...record, source: { display_name: data.name.trim(), content_hash: data.contentHash.toLowerCase(), duration: clean(data.duration || '', 40) || '', analysis_provider: 'Gemini', analysis_model: body.model || 'gemini-3.8-flash' }, provenance: { usage: body.usage || null } } });
+  } finally {
+    if (temporaryFileName) await deleteTemporaryFile(temporaryFileName, context.env.GEMINI_API_KEY, controller.signal);
+    clearTimeout(timeout);
+  }
 }
