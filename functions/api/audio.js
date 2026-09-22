@@ -1,4 +1,4 @@
-const MAX_AUDIO_BYTES = 12 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const AUDIO_TYPE = 'audio/mpeg';
 const SCHEMA_VERSION = 'lpx-listening-record/0.1';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com';
@@ -107,7 +107,7 @@ export async function onRequest(context) {
   if (!context.env.LPX_GEMINI_PRODUCTION_KEY) return json({ error: 'Recording listening is not configured yet. Please try again after the site administrator adds its server-side key.' }, 503);
   let data; try { data = await context.request.json(); } catch { return json({ error: 'The recording could not be read. Please try again.' }, 400); }
   if (!data || !clean(data.name, 200) || typeof data.note !== 'string' || data.note.length > 1000 || !/^[a-f0-9]{64}$/i.test(data.contentHash || '')) return json({ error: 'The recording details are not valid. Please try again.' }, 400);
-  const audio = parseDataUrl(data.dataUrl); if (!audio) return json({ error: 'Choose a non-empty MP3 under 12 MB.' }, 400);
+  const audio = parseDataUrl(data.dataUrl); if (!audio) return json({ error: 'Choose a non-empty MP3 under 25 MB.' }, 400);
   const controller = new AbortController(); let timedOut = false; const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 300000);
   let temporaryFileName = null;
   let stage = 'upload_init';

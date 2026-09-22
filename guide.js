@@ -42,7 +42,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   const MAX_LOCAL_FILE_BYTES = 25 * 1024 * 1024;
   const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
   const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
-  const MAX_AUDIO_BYTES = 12 * 1024 * 1024;
+  const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
   const VISION_TRIGGER = 'i think i know what this record wants to be';
   const BRIEF_TRIGGER = 'i think we have it. i’m ready to turn this into your lpx creative brief.';
 
@@ -216,7 +216,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     if (!file) return 'Choose an MP3 first.';
     if (file.type !== 'audio/mpeg' && !file.name.toLowerCase().endsWith('.mp3')) return 'Choose an MP3 recording.';
     if (!file.size) return 'That recording is empty. Please choose another MP3.';
-    if (file.size > MAX_AUDIO_BYTES) return 'That recording is too large. Please choose an MP3 under 12 MB.';
+    if (file.size > MAX_AUDIO_BYTES) return 'That recording is too large. Please choose an MP3 under 25 MB.';
     return '';
   }
   function audioDuration(file) { return new Promise(resolve => { const url = URL.createObjectURL(file); const probe = document.createElement('audio'); probe.preload = 'metadata'; probe.onloadedmetadata = () => { const seconds = Number.isFinite(probe.duration) ? Math.round(probe.duration) : 0; URL.revokeObjectURL(url); resolve(seconds ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` : ''); }; probe.onerror = () => { URL.revokeObjectURL(url); resolve(''); }; probe.src = url; }); }
@@ -398,6 +398,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   downloadConversationButton.addEventListener('click', downloadConversation);
   startOverButton.addEventListener('click', () => {
     if (!window.confirm('Start over? This clears this browser-only Guide conversation.')) return;
-    state.basics = null; state.source = null; state.messages = []; state.pendingImages = []; state.listeningRecord = null; state.audioHash = ''; state.brief = null; state.briefApproved = false; state.canonLocked = false; messages.replaceChildren(); briefContent.replaceChildren(); briefArtifact.hidden = true; briefError.hidden = true; updateExportAvailability(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); messageForm.reset(); imageStatus.textContent = 'JPEG, PNG, or WebP · up to 4 MB'; audioStatus.textContent = 'MP3 · up to 12 MB'; fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
+    state.basics = null; state.source = null; state.messages = []; state.pendingImages = []; state.listeningRecord = null; state.audioHash = ''; state.brief = null; state.briefApproved = false; state.canonLocked = false; messages.replaceChildren(); briefContent.replaceChildren(); briefArtifact.hidden = true; briefError.hidden = true; updateExportAvailability(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); messageForm.reset(); imageStatus.textContent = 'JPEG, PNG, or WebP · up to 4 MB'; audioStatus.textContent = 'MP3 · up to 25 MB'; fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
   });
 })();
