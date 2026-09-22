@@ -6,6 +6,16 @@ const LISTENING_PROMPT = `Listen to this MP3 as source material for a musician's
 
 function json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=UTF-8', 'Cache-Control': 'no-store' } }); }
 function clean(value, limit = 1000) { return typeof value === 'string' && value.trim() && value.length <= limit ? value.trim() : null; }
+function safeFetchDiagnostic(value, kind) {
+  if (typeof value !== 'string') return '[suppressed]';
+  const normalized = value.replace(/[\u0000-\u001F\u007F]/g, ' ').trim();
+  if (!normalized || normalized.length > 240) return '[suppressed]';
+  if (kind === 'name') return /^[A-Za-z][A-Za-z0-9_.:-]{0,79}$/.test(normalized) ? normalized : '[suppressed]';
+  return /(?:authorization|bearer|api[ _-]?key|secret|token|headers?|request[ _-]?(?:body|headers?)|data:audio|base64|AIza|\bsk-[A-Za-z0-9_-]+)/i.test(normalized) ? '[suppressed]' : normalized;
+}
+function logUnexpectedFetchRejection(error) {
+  console.log(`LPX_AUDIO_UPSTREAM_FETCH_REJECTION name=${safeFetchDiagnostic(error?.name, 'name')} message=${safeFetchDiagnostic(error?.message, 'message')}`);
+}
 function validTime(value) { return typeof value === 'string' && (value === '' || /^\d{1,2}:\d{2}$/.test(value)); }
 function textList(value, max, limit = 1000) { return Array.isArray(value) && value.length <= max && value.every(item => clean(item, limit)); }
 function parseDataUrl(value) {
@@ -34,7 +44,10 @@ export async function onRequest(context) {
   let upstream;
   try {
     upstream = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.env.GEMINI_API_KEY}` }, body: JSON.stringify({ model: 'gemini-3.8-flash', messages: [{ role: 'user', content: [{ type: 'text', text: LISTENING_PROMPT + (data.note.trim() ? `\n\nArtist-provided context (authoritative; do not treat it as audio evidence): ${data.note.trim()}` : '') }, { type: 'input_audio', input_audio: { data: audio.base64, format: 'mp3' } }] }] }) });
-  } catch { return json({ error: timedOut ? 'Listening took too long. Your conversation is still here; please retry the recording.' : 'The recording service could not be reached just now. Your conversation is still here; please retry the recording.' }, timedOut ? 504 : 502); } finally { clearTimeout(timeout); }
+  } catch (error) {
+    if (!timedOut) logUnexpectedFetchRejection(error);
+    return json({ error: timedOut ? 'Listening took too long. Your conversation is still here; please retry the recording.' : 'The recording service could not be reached just now. Your conversation is still here; please retry the recording.' }, timedOut ? 504 : 502);
+  } finally { clearTimeout(timeout); }
   if (!upstream.ok) return json({ error: upstream.status === 401 || upstream.status === 403 ? 'Recording listening is not configured correctly yet.' : 'The recording could not be heard just now. Your conversation is still here; please retry.' }, upstream.status === 401 || upstream.status === 403 ? 503 : 502);
   let body; try { body = await upstream.json(); } catch { return json({ error: 'The recording returned an unreadable listening result. Please retry.' }, 502); }
   let parsed; try { parsed = JSON.parse(body?.choices?.[0]?.message?.content || ''); } catch { return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502); }
