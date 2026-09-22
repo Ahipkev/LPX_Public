@@ -5,6 +5,12 @@ const SOURCE_LIMITS = { track_list: 20000, lyrics: 100000, other_material: 50000
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_IMAGES_PER_REQUEST = 1;
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const GUIDE_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: { message: { type: 'string' }, brief_ready: { type: 'boolean' } },
+  required: ['message', 'brief_ready'],
+  additionalProperties: false
+};
 
 const GUIDE_INSTRUCTIONS = `You are the LPX Guide, a thoughtful creative collaborator for musicians making an LPX: an open, artist-owned publishing format for albums. Your work is to understand the record well enough to help the artist discover what kind of place it wants to become, never to complete an intake process.
 
@@ -53,6 +59,14 @@ function getOutputText(output) {
   if (!Array.isArray(output)) return '';
   return output.flatMap(item => item?.type === 'message' && Array.isArray(item.content) ? item.content : []).filter(part => part?.type === 'output_text' && typeof part.text === 'string').map(part => part.text).join('\n').trim();
 }
+function getGuideResponse(output) {
+  const value = getOutputText(output);
+  try {
+    const response = JSON.parse(value);
+    if (!response || typeof response.message !== 'string' || !response.message.trim() || typeof response.brief_ready !== 'boolean') return null;
+    return { message: response.message.trim(), briefReady: response.brief_ready };
+  } catch { return null; }
+}
 
 export async function onRequest(context) {
   if (context.request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
@@ -100,7 +114,7 @@ export async function onRequest(context) {
   const timeout = setTimeout(() => controller.abort(), 45000);
   let upstream;
   try {
-    upstream = await fetch('https://api.openai.com/v1/responses', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.env.LPX_OPENAI_PRODUCTION_KEY}` }, body: JSON.stringify({ model: 'gpt-5.6-terra', store: false, reasoning: { effort: 'medium' }, max_output_tokens: 900, instructions: `${GUIDE_INSTRUCTIONS}\n\n${basicsContext}${sourceContext ? `\n\nOptional source material for this active session:\n${sourceContext}` : ''}${audioContext ? `\n\nAudio-derived listening observations for this active session. This is provider-neutral working evidence, not artist canon. The artist remains authoritative over meaning. Timestamps are approximate. Use it naturally if relevant; never name a provider, expose a schema, or present interpretations as fact.\n${audioContext}` : ''}`, input }) });
+    upstream = await fetch('https://api.openai.com/v1/responses', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.env.LPX_OPENAI_PRODUCTION_KEY}` }, body: JSON.stringify({ model: 'gpt-5.6-terra', store: false, reasoning: { effort: 'medium' }, max_output_tokens: 900, text: { format: { type: 'json_schema', name: 'lpx_guide_turn', strict: true, schema: GUIDE_RESPONSE_SCHEMA } }, instructions: `${GUIDE_INSTRUCTIONS}\n\nReturn only the response object required by the response schema. Put the complete natural, musician-facing reply in message. Set brief_ready to true only when discovery, artist approval, and the necessary targeted refinements are complete and you are ready for the application to generate the Creative Brief. When brief_ready is true, say naturally that the brief is ready, but do not write any part of the Creative Brief in this response. Otherwise set brief_ready to false.\n\n${basicsContext}${sourceContext ? `\n\nOptional source material for this active session:\n${sourceContext}` : ''}${audioContext ? `\n\nAudio-derived listening observations for this active session. This is provider-neutral working evidence, not artist canon. The artist remains authoritative over meaning. Timestamps are approximate. Use it naturally if relevant; never name a provider, expose a schema, or present interpretations as fact.\n${audioContext}` : ''}`, input }) });
   } catch { return json({ error: 'The Guide took too long to respond. Please try again.' }, 504); }
   finally { clearTimeout(timeout); }
   if (!upstream.ok) {
@@ -110,7 +124,7 @@ export async function onRequest(context) {
   }
   let response;
   try { response = await upstream.json(); } catch { return json({ error: 'The Guide returned an unreadable response. Please retry.' }, 502); }
-  const message = getOutputText(response.output);
-  if (!message) return json({ error: 'The Guide did not return a usable response. Please retry.' }, 502);
-  return json({ message });
+  const guideResponse = getGuideResponse(response.output);
+  if (!guideResponse) return json({ error: 'The Guide did not return a usable response. Please retry.' }, 502);
+  return json(guideResponse);
 }
