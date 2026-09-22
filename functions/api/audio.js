@@ -30,11 +30,11 @@ export async function onRequest(context) {
   let data; try { data = await context.request.json(); } catch { return json({ error: 'The recording could not be read. Please try again.' }, 400); }
   if (!data || !clean(data.name, 200) || typeof data.note !== 'string' || data.note.length > 1000 || !/^[a-f0-9]{64}$/i.test(data.contentHash || '')) return json({ error: 'The recording details are not valid. Please try again.' }, 400);
   const audio = parseDataUrl(data.dataUrl); if (!audio) return json({ error: 'Choose a non-empty MP3 under 12 MB.' }, 400);
-  const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 90000);
+  const controller = new AbortController(); let timedOut = false; const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 300000);
   let upstream;
   try {
     upstream = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.env.GEMINI_API_KEY}` }, body: JSON.stringify({ model: 'gemini-3.8-flash', messages: [{ role: 'user', content: [{ type: 'text', text: LISTENING_PROMPT + (data.note.trim() ? `\n\nArtist-provided context (authoritative; do not treat it as audio evidence): ${data.note.trim()}` : '') }, { type: 'input_audio', input_audio: { data: audio.base64, format: 'mp3' } }] }] }) });
-  } catch { return json({ error: 'Listening took too long. Your conversation is still here; please retry the recording.' }, 504); } finally { clearTimeout(timeout); }
+  } catch { return json({ error: timedOut ? 'Listening took too long. Your conversation is still here; please retry the recording.' : 'The recording service could not be reached just now. Your conversation is still here; please retry the recording.' }, timedOut ? 504 : 502); } finally { clearTimeout(timeout); }
   if (!upstream.ok) return json({ error: upstream.status === 401 || upstream.status === 403 ? 'Recording listening is not configured correctly yet.' : 'The recording could not be heard just now. Your conversation is still here; please retry.' }, upstream.status === 401 || upstream.status === 403 ? 503 : 502);
   let body; try { body = await upstream.json(); } catch { return json({ error: 'The recording returned an unreadable listening result. Please retry.' }, 502); }
   let parsed; try { parsed = JSON.parse(body?.choices?.[0]?.message?.content || ''); } catch { return json({ error: 'The recording returned an incomplete listening result. Please retry.' }, 502); }
