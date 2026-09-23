@@ -4,6 +4,7 @@ const MAX_BASIC_CHARS = 2000;
 const SOURCE_LIMITS = { track_list: 20000, lyrics: 100000, other_material: 50000 };
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_IMAGES_PER_REQUEST = 1;
+const MAX_LISTENING_RECORDS = 24;
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const GUIDE_RESPONSE_SCHEMA = {
   type: 'object',
@@ -98,8 +99,11 @@ export async function onRequest(context) {
   if (!Array.isArray(images) || images.length > MAX_IMAGES_PER_REQUEST) return json({ error: 'Add one JPEG, PNG, or WebP image at a time.' }, 400);
   const visualSources = images.map(imageDataUrl);
   if (visualSources.some(image => !image)) return json({ error: 'That image could not be accepted. Use a JPEG, PNG, or WebP image under 4 MB.' }, 400);
-  const audioContext = data.listeningRecord === undefined || data.listeningRecord === null ? '' : listeningRecord(data.listeningRecord);
-  if (data.listeningRecord && !audioContext) return json({ error: 'The recording context could not be read. Please listen to it again.' }, 400);
+  const suppliedRecords = data.listeningRecords === undefined ? (data.listeningRecord === undefined || data.listeningRecord === null ? [] : [data.listeningRecord]) : data.listeningRecords;
+  if (!Array.isArray(suppliedRecords) || suppliedRecords.length > MAX_LISTENING_RECORDS) return json({ error: 'The recording context could not be read. Please listen to it again.' }, 400);
+  const audioRecords = suppliedRecords.map(listeningRecord);
+  if (audioRecords.some(record => !record)) return json({ error: 'The recording context could not be read. Please listen to it again.' }, 400);
+  const audioContext = audioRecords.map((record, index) => `--- Recording ${index + 1} ---\n${record}`).join('\n\n');
   if (!context.env.LPX_OPENAI_PRODUCTION_KEY) return json({ error: 'The Guide is not configured yet. Please try again after the site administrator adds its server-side API key.' }, 503);
   const basicsContext = `Artist Basics (already known; do not repeat these back as a list):\nWhat they are: ${basics.identity.trim()}\nName: ${basics.name.trim()}\nMusic: ${basics.music.trim()}\nPeople involved: ${(text(basics.people, MAX_BASIC_CHARS) || 'Not provided')}\nRoles: ${(text(basics.roles, MAX_BASIC_CHARS) || 'Not provided')}\nRecord: ${basics.record.trim()}\nRecord status: ${basics.stage.trim()}`;
   const sourceContext = Object.entries(sourceMaterial).filter(([, value]) => value).map(([key, value]) => `--- ${key === 'track_list' ? 'Track list' : key === 'other_material' ? 'Other written material' : 'Lyrics'} ---\n${value}`).join('\n\n');

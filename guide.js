@@ -16,6 +16,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   const audioNote = document.querySelector('#audio-note');
   const audioStatus = document.querySelector('#audio-status');
   const listenAudioButton = document.querySelector('#listen-audio');
+  const audioQueue = document.querySelector('#audio-queue');
   const messages = document.querySelector('#messages');
   const thinking = document.querySelector('#thinking');
   const formError = document.querySelector('#basics-error');
@@ -37,7 +38,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   const lyricsFile = document.querySelector('#lyrics-file');
   const fileStatus = document.querySelector('#file-status');
   const clearLyricsButton = document.querySelector('#clear-lyrics');
-  const state = { basics: null, source: null, messages: [], pendingImages: [], listeningRecord: null, audioHash: '', pending: false, brief: null, briefReady: false, briefPending: false, canonLocked: false };
+  const state = { basics: null, source: null, messages: [], pendingImages: [], audioTracks: [], pending: false, brief: null, briefReady: false, briefPending: false, canonLocked: false };
   const SOURCE_LIMITS = { track_list: 20000, lyrics: 100000, other_material: 50000 };
   const MAX_LOCAL_FILE_BYTES = 25 * 1024 * 1024;
   const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -55,7 +56,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     imageNote.disabled = !canWrite;
     audioInput.disabled = !canWrite;
     audioNote.disabled = !canWrite;
-    listenAudioButton.disabled = !canWrite || !audioInput.files?.[0];
+    listenAudioButton.disabled = !canWrite || !state.audioTracks.some(track => track.status === 'WAITING');
     thinking.hidden = !busy;
     if (canWrite) messageInput.focus({ preventScroll: true });
   }
@@ -195,7 +196,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     hideError();
     setBusy(true);
     try {
-      const response = await fetch('/api/guide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ basics: state.basics, source: state.source, messages: state.messages, images: state.pendingImages, listeningRecord: state.listeningRecord }) });
+      const listeningRecords = state.audioTracks.filter(track => track.status === 'HEARD' && track.record).map(track => track.record);
+      const response = await fetch('/api/guide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ basics: state.basics, source: state.source, messages: state.messages, images: state.pendingImages, listeningRecords }) });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload?.message) throw new Error(payload?.error || 'The Guide could not respond just now. Please try again.');
       state.messages.push({ role: 'assistant', text: payload.message });
@@ -249,33 +251,77 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   function audioDuration(file) { return new Promise(resolve => { const url = URL.createObjectURL(file); const probe = document.createElement('audio'); probe.preload = 'metadata'; probe.onloadedmetadata = () => { const seconds = Number.isFinite(probe.duration) ? Math.round(probe.duration) : 0; URL.revokeObjectURL(url); resolve(seconds ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` : ''); }; probe.onerror = () => { URL.revokeObjectURL(url); resolve(''); }; probe.src = url; }); }
   async function audioHash(file) { const bytes = await file.arrayBuffer(); const hash = await crypto.subtle.digest('SHA-256', bytes); return [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, '0')).join(''); }
   function readAudioFile(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('That recording could not be read.')); reader.onerror = () => reject(new Error('That recording could not be read.')); reader.readAsDataURL(file); }); }
-  audioInput.addEventListener('change', () => { const file = audioInput.files?.[0]; const error = validateAudioFile(file); audioStatus.textContent = error || `${file.name} ready to listen.`; listenAudioButton.disabled = Boolean(error) || !file || state.pending; });
-  async function listenToRecording(file) {
-    const error = validateAudioFile(file); if (error || state.pending) throw new Error(error || 'The Guide is busy. Please wait a moment.');
-    try {
-      setBusy(true); audioStatus.textContent = 'Listening to the recording…';
-      const [hash, duration, dataUrl] = await Promise.all([audioHash(file), audioDuration(file), readAudioFile(file)]);
-      if (state.listeningRecord && state.audioHash === hash) { audioStatus.textContent = 'Recording heard.'; return; }
-      const response = await fetch('/api/audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: file.name.slice(0, 200), note: clean(audioNote.value).slice(0, 1000), duration, contentHash: hash, dataUrl }) });
-      const payload = await response.json().catch(() => null); if (!response.ok || !payload?.record) throw new Error(payload?.error || 'The recording could not be heard just now. Please retry.');
-      state.listeningRecord = payload.record; state.audioHash = hash; state.messages.push({ role: 'user', text: `[AUDIO SOURCE: ${file.name}]${audioNote.value.trim() ? `\nContext: ${audioNote.value.trim()}` : ''}` });
-      addMessage('artist', `[AUDIO SOURCE: ${file.name}]`); audioInput.value = ''; audioNote.value = ''; audioStatus.textContent = 'Recording heard.';
-    } catch (issue) { audioStatus.textContent = issue.message || 'The recording could not be heard. Please retry.'; throw issue; } finally { setBusy(false); }
+  function audioMarker(track) { return `[AUDIO SOURCE: ${track.name}]${track.note ? `\nContext: ${track.note}` : ''}`; }
+  function renderAudioQueue() {
+    audioQueue.replaceChildren();
+    if (!state.audioTracks.length) { audioQueue.hidden = true; return; }
+    audioQueue.hidden = false;
+    for (const track of state.audioTracks) {
+      const row = document.createElement('p');
+      row.className = track.status.toLowerCase();
+      const symbol = track.status === 'HEARD' ? '✓' : track.status === 'LISTENING' ? '🎧' : track.status === 'FAILED' ? '!' : '○';
+      row.textContent = `${symbol} ${track.name} — ${track.status === 'HEARD' ? 'Heard' : track.status === 'LISTENING' ? 'Listening' : track.status === 'FAILED' ? 'Failed' : 'Waiting'}`;
+      audioQueue.append(row);
+      if (track.status === 'FAILED') { const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'text-button'; retry.textContent = `RETRY ${track.name}`; retry.disabled = state.pending; retry.addEventListener('click', () => retryAudioTrack(track)); audioQueue.append(retry); }
+    }
   }
-  listenAudioButton.addEventListener('click', async () => {
-    const file = audioInput.files?.[0]; const error = validateAudioFile(file); if (error || state.pending) { audioStatus.textContent = error; return; }
-    try { await listenToRecording(file); } catch {}
-  });
+  function addAudioMarker(track) {
+    const marker = audioMarker(track);
+    state.messages.push({ role: 'user', text: marker });
+    addMessage('artist', `[AUDIO SOURCE: ${track.name}]`);
+  }
+  function queueAudioFiles(files) {
+    const note = clean(audioNote.value).slice(0, 1000);
+    const invalid = [];
+    for (const file of files) {
+      const error = validateAudioFile(file);
+      if (error) { invalid.push(`${file.name}: ${error}`); continue; }
+      state.audioTracks.push({ file, name: file.name.slice(0, 200), note, hash: '', record: null, status: 'WAITING', error: '' });
+    }
+    audioInput.value = ''; audioNote.value = '';
+    audioStatus.textContent = invalid.length ? `Queued ${files.length - invalid.length} recording${files.length - invalid.length === 1 ? '' : 's'}. ${invalid.join(' ')}` : `${files.length} recording${files.length === 1 ? '' : 's'} ready to listen.`;
+    renderAudioQueue(); setBusy(state.pending);
+  }
+  async function listenToRecording(track) {
+    const error = validateAudioFile(track.file); if (error) throw new Error(error);
+    track.status = 'LISTENING'; track.error = ''; renderAudioQueue();
+    try {
+      const [hash, duration] = await Promise.all([audioHash(track.file), audioDuration(track.file)]);
+      track.hash = hash;
+      const existing = state.audioTracks.find(candidate => candidate !== track && candidate.status === 'HEARD' && candidate.hash === hash && candidate.record);
+      if (existing) {
+        track.record = { ...existing.record, source: { ...existing.record.source, display_name: track.name } };
+      } else {
+        const dataUrl = await readAudioFile(track.file);
+        const response = await fetch('/api/audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: track.name, note: track.note, duration, contentHash: hash, dataUrl }) });
+        const payload = await response.json().catch(() => null); if (!response.ok || !payload?.record) throw new Error(payload?.error || 'The recording could not be heard just now. Please retry.');
+        track.record = payload.record;
+      }
+      track.status = 'HEARD'; addAudioMarker(track);
+    } catch (issue) { track.status = 'FAILED'; track.error = issue.message || 'The recording could not be heard. Please retry.'; throw issue; }
+    finally { renderAudioQueue(); }
+  }
+  async function processAudioQueue(onlyTrack = null) {
+    if (state.pending) return;
+    const tracks = onlyTrack ? [onlyTrack] : state.audioTracks.filter(track => track.status === 'WAITING');
+    if (!tracks.length) return;
+    setBusy(true); audioStatus.textContent = 'Listening to the record…';
+    try {
+      for (const track of tracks) { try { await listenToRecording(track); } catch {} }
+      audioStatus.textContent = state.audioTracks.some(track => track.status === 'WAITING' || track.status === 'LISTENING') ? 'Recording queue paused.' : 'Recording queue complete.';
+    } finally { setBusy(false); }
+  }
+  async function retryAudioTrack(track) { if (state.pending || track.status !== 'FAILED') return; track.status = 'WAITING'; renderAudioQueue(); await processAudioQueue(track); }
+  audioInput.addEventListener('change', () => { const files = [...(audioInput.files || [])]; if (files.length) queueAudioFiles(files); });
+  listenAudioButton.addEventListener('click', async () => { await processAudioQueue(); });
   messageForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const text = clean(messageInput.value);
     const file = imageInput.files?.[0];
-    const audioFile = audioInput.files?.[0];
-    if (state.pending || (!text && !file && !audioFile)) return;
+    const hasWaitingAudio = state.audioTracks.some(track => track.status === 'WAITING');
+    if (state.pending || (!text && !file && !hasWaitingAudio)) return;
     const error = validateImageFile(file);
     if (file && error) { imageStatus.textContent = error; return; }
-    const audioError = audioFile && validateAudioFile(audioFile);
-    if (audioError) { audioStatus.textContent = audioError; return; }
     try {
       if (state.brief && !state.canonLocked) { state.brief = null; briefArtifact.hidden = true; }
       const generateBrief = text && state.briefReady && isBriefApproval(text);
@@ -286,7 +332,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
       if (generateBrief) {
         messageInput.value = '';
         if (file) { imageInput.value = ''; imageNote.value = ''; imageStatus.textContent = 'Image not added. Preparing your approved Creative Brief.'; }
-        if (audioFile) { audioInput.value = ''; audioNote.value = ''; audioStatus.textContent = 'Recording not added. Preparing your approved Creative Brief.'; }
+        if (hasWaitingAudio) { audioStatus.textContent = 'Queued recordings not added. Preparing your approved Creative Brief.'; }
         await generateCreativeBrief();
         return;
       }
@@ -297,16 +343,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
         state.messages.push({ role: 'user', text: attachmentText(image) });
         addImageMessage(image);
       }
-      if (audioFile) await listenToRecording(audioFile);
+      if (hasWaitingAudio) await processAudioQueue();
       imageInput.value = '';
       imageNote.value = '';
       messageInput.value = '';
       imageStatus.textContent = file ? 'Image added. The Guide is looking at it now.' : 'JPEG, PNG, or WebP · up to 4 MB';
       if (generateBrief) { await generateCreativeBrief(); } else { await askGuide(); }
-    } catch (issue) {
-      if (audioFile) audioStatus.textContent = issue.message || 'The recording could not be heard. Please retry.';
-      else imageStatus.textContent = issue.message || 'That image could not be added. Please try another file.';
-    }
+    } catch (issue) { imageStatus.textContent = issue.message || 'That image could not be added. Please try another file.'; }
   });
   function showBriefError(message) { briefError.querySelector('p').textContent = message; briefError.hidden = false; }
   function safeFilename(value) { return value.normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s-]+/g, '_').slice(0, 80) || 'LPX'; }
@@ -432,6 +475,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   downloadConversationButton.addEventListener('click', downloadConversation);
   startOverButton.addEventListener('click', () => {
     if (!window.confirm('Start over? This clears this browser-only Guide conversation.')) return;
-    state.basics = null; state.source = null; state.messages = []; state.pendingImages = []; state.listeningRecord = null; state.audioHash = ''; state.brief = null; state.briefReady = false; state.canonLocked = false; messages.replaceChildren(); briefContent.replaceChildren(); briefArtifact.hidden = true; briefError.hidden = true; updateExportAvailability(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); messageForm.reset(); imageStatus.textContent = 'JPEG, PNG, or WebP · up to 4 MB'; audioStatus.textContent = 'MP3 · up to 25 MB'; fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
+    state.basics = null; state.source = null; state.messages = []; state.pendingImages = []; state.audioTracks = []; state.brief = null; state.briefReady = false; state.canonLocked = false; messages.replaceChildren(); briefContent.replaceChildren(); renderAudioQueue(); briefArtifact.hidden = true; briefError.hidden = true; updateExportAvailability(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); messageForm.reset(); imageStatus.textContent = 'JPEG, PNG, or WebP · up to 4 MB'; audioStatus.textContent = 'MP3 · up to 25 MB each'; fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
   });
 })();

@@ -71,6 +71,12 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--gold); ou
 .composer-attachment .text-button { margin: 0; }
 .composer-attachment input { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 .composer-attachment p { margin: 0; color: var(--copy-secondary); font: 500 9px/1.5 "Montserrat", sans-serif; letter-spacing: .08em; }
+.audio-queue { display: grid; gap: 7px; margin-top: 12px; padding: 12px; border-left: 1px solid rgba(203,171,102,.55); background: rgba(0,0,0,.2); }
+.audio-queue p { margin: 0; color: var(--copy-secondary); font: 500 10px/1.5 "Montserrat", sans-serif; letter-spacing: .08em; }
+.audio-queue .heard { color: var(--copy); }
+.audio-queue .listening { color: var(--gold); }
+.audio-queue .failed { color: var(--copy); }
+.audio-queue button { justify-self: start; margin: 0; }
 .image-note { width: 100%; min-height: 64px; margin-top: 12px; border: 0; border-bottom: 1px solid #7b6a4c; border-radius: 0; background: rgba(0,0,0,.27); color: var(--copy); font: 400 15px/1.6 "Manrope", sans-serif; padding: 9px 12px; resize: vertical; }
 .image-preview { display: block; width: min(100%, 240px); max-height: 240px; margin: 0 0 12px auto; border: 1px solid rgba(203,171,102,.55); object-fit: contain; background: rgba(0,0,0,.34); }
 .image-name { margin: 0; color: var(--copy); font: 500 10px/1.5 "Montserrat", sans-serif; letter-spacing: .11em; overflow-wrap: anywhere; }
