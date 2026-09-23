@@ -14,12 +14,33 @@ function contextFrom(data) {
   const source = data.source && typeof data.source === 'object' ? data.source : {};
   return `Artist: ${basics.name}\nRecord: ${basics.record}\nMusic: ${basics.music}\nStatus: ${basics.stage}\n\nConversation:\n${data.messages.map(item => `${item.role === 'user' ? 'Artist' : 'Guide'}: ${item.text}`).join('\n\n')}\n\nSource material:\n${['track_list', 'lyrics', 'other_material'].map(key => source[key] ? `${key}: ${String(source[key]).slice(0, key === 'lyrics' ? 100000 : 50000)}` : '').filter(Boolean).join('\n\n')}`;
 }
-function logBriefFailure(stage, category, upstreamStatus = '', sectionIndex = '') {
+const SAFE_INCOMPLETE_REASONS = new Set(['max_output_tokens']);
+function safeUsageFields(usage) {
+  const numeric = value => Number.isInteger(value) && value >= 0 ? value : null;
+  const fields = [
+    ['input_tokens', numeric(usage?.input_tokens)],
+    ['output_tokens', numeric(usage?.output_tokens)],
+    ['reasoning_tokens', numeric(usage?.output_tokens_details?.reasoning_tokens)],
+    ['total_tokens', numeric(usage?.total_tokens)],
+    ['cached_input_tokens', numeric(usage?.input_tokens_details?.cached_tokens)]
+  ];
+  return fields.filter(([, value]) => value !== null).map(([key, value]) => `${key}=${value}`).join(' ');
+}
+function incompleteReason(body) {
+  const reason = body?.incomplete_details?.reason;
+  return SAFE_INCOMPLETE_REASONS.has(reason) ? reason : 'unknown';
+}
+function logBriefFailure(stage, category, upstreamStatus = '', sectionIndex = '', metadata = '') {
   const safeStages = new Set(['plan', 'section', 'canon']);
   const safeCategories = new Set(['network', 'upstream_http', 'upstream_json', 'incomplete', 'missing_output', 'output_json', 'plan_validation', 'section_validation', 'canon_validation']);
   const status = Number.isInteger(upstreamStatus) ? ` upstream_status=${upstreamStatus}` : '';
   const index = Number.isInteger(sectionIndex) && sectionIndex >= 0 ? ` section_index=${sectionIndex}` : '';
-  console.error(`LPX_BRIEF_FAILURE endpoint=brief stage=${safeStages.has(stage) ? stage : 'plan'} category=${safeCategories.has(category) ? category : 'plan_validation'}${status}${index}`);
+  const details = typeof metadata === 'string' && metadata ? ` ${metadata}` : '';
+  console.error(`LPX_BRIEF_FAILURE endpoint=brief stage=${safeStages.has(stage) ? stage : 'plan'} category=${safeCategories.has(category) ? category : 'plan_validation'}${status}${index}${details}`);
+}
+function logPlanUsage(usage) {
+  const fields = safeUsageFields(usage);
+  console.log(`LPX_BRIEF_USAGE stage=plan${fields ? ` ${fields}` : ''}`);
 }
 function briefErrorFor(stage, category) {
   if (stage === 'canon') return 'The Canon Ledger needs another pass. Please retry.';
@@ -45,7 +66,9 @@ async function ask(context, prompt, maxOutputTokens, diagnostic) {
     throw new Error(briefErrorFor(diagnostic.stage, 'upstream_json'));
   }
   if (body?.status === 'incomplete') {
-    logBriefFailure(diagnostic.stage, 'incomplete', response.status, diagnostic.sectionIndex);
+    const usage = safeUsageFields(body.usage);
+    const metadata = diagnostic.stage === 'plan' ? `incomplete_reason=${incompleteReason(body)}${usage ? ` ${usage}` : ''}` : '';
+    logBriefFailure(diagnostic.stage, 'incomplete', response.status, diagnostic.sectionIndex, metadata);
     throw new Error(briefErrorFor(diagnostic.stage, 'incomplete'));
   }
   const text = outputText(body?.output);
@@ -53,7 +76,11 @@ async function ask(context, prompt, maxOutputTokens, diagnostic) {
     logBriefFailure(diagnostic.stage, 'missing_output', response.status, diagnostic.sectionIndex);
     throw new Error(briefErrorFor(diagnostic.stage, 'missing_output'));
   }
-  try { return JSON.parse(text); } catch {
+  try {
+    const parsed = JSON.parse(text);
+    if (diagnostic.stage === 'plan') logPlanUsage(body.usage);
+    return parsed;
+  } catch {
     logBriefFailure(diagnostic.stage, 'output_json', response.status, diagnostic.sectionIndex);
     throw new Error(briefErrorFor(diagnostic.stage, 'output_json'));
   }
@@ -70,7 +97,7 @@ export async function onRequest(context) {
   const session = contextFrom(data); if (!session) return json({ error: 'The Creative Brief needs the current Guide conversation.' }, 400);
   try {
     if (data.action === 'plan') {
-      const plan = await ask(context, `${session}\n\nCreate a concise complete-artifact manifest. Return JSON only: {"title":"string","sections":[{"id":"lowercase-hyphen-id","title":"string","brief":"what this section must faithfully cover"}],"ledger":[{"status":"LOCKED FACT|LOCKED CREATIVE DECISION|APPROVED VISUAL REFERENCE|GUIDE INTERPRETATION|OPTIONAL DIRECTION|OPEN — DO NOT INVENT","subject":"string","detail":"string","establishes":["string"],"does_not_require":["string"]}]}. Include record-level direction, listener journey, relevant individual track treatments, ending/final state, and only conversation-supported facts. Preserve unknowns as OPEN — DO NOT INVENT; never silently promote interpretations. 6-18 sections.`, 1600, { stage: 'plan' });
+      const plan = await ask(context, `${session}\n\nCreate a concise complete-artifact manifest. Return JSON only: {"title":"string","sections":[{"id":"lowercase-hyphen-id","title":"string","brief":"what this section must faithfully cover"}],"ledger":[{"status":"LOCKED FACT|LOCKED CREATIVE DECISION|APPROVED VISUAL REFERENCE|GUIDE INTERPRETATION|OPTIONAL DIRECTION|OPEN — DO NOT INVENT","subject":"string","detail":"string","establishes":["string"],"does_not_require":["string"]}]}. Include record-level direction, listener journey, relevant individual track treatments, ending/final state, and only conversation-supported facts. Preserve unknowns as OPEN — DO NOT INVENT; never silently promote interpretations. 6-18 sections.`, 25000, { stage: 'plan' });
       if (!clean(plan?.title, 200) || !Array.isArray(plan.sections) || plan.sections.length < 3 || plan.sections.length > MAX_SECTIONS || plan.sections.some(section => !/^[a-z0-9-]{1,60}$/.test(section?.id || '') || !clean(section.title, 200) || !clean(section.brief, 1000))) { logBriefFailure('plan', 'plan_validation'); throw new Error('The Creative Brief plan needs another pass. Please retry.'); }
       const statuses = new Set(['LOCKED FACT', 'LOCKED CREATIVE DECISION', 'APPROVED VISUAL REFERENCE', 'GUIDE INTERPRETATION', 'OPTIONAL DIRECTION', 'OPEN — DO NOT INVENT']);
       const ledger = Array.isArray(plan.ledger) ? plan.ledger.filter(entry => statuses.has(entry?.status) && clean(entry.subject, 300) && clean(entry.detail, 1500)).slice(0, 60).map(entry => ({ status: entry.status, subject: entry.subject.trim(), detail: entry.detail.trim(), establishes: Array.isArray(entry.establishes) ? entry.establishes.filter(item => clean(item, 300)).slice(0, 12) : [], does_not_require: Array.isArray(entry.does_not_require) ? entry.does_not_require.filter(item => clean(item, 300)).slice(0, 12) : [] })) : [];
