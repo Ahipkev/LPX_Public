@@ -8,8 +8,8 @@ const MAX_LISTENING_RECORDS = 24;
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const GUIDE_RESPONSE_SCHEMA = {
   type: 'object',
-  properties: { message: { type: 'string' }, brief_ready: { type: 'boolean' } },
-  required: ['message', 'brief_ready'],
+  properties: { message: { type: 'string' }, brief_ready: { type: 'boolean' }, brief_intent: { type: 'string', enum: ['none', 'approve', 'continue', 'decline'] } },
+  required: ['message', 'brief_ready', 'brief_intent'],
   additionalProperties: false
 };
 
@@ -62,13 +62,22 @@ function getOutputText(output) {
   if (!Array.isArray(output)) return '';
   return output.flatMap(item => item?.type === 'message' && Array.isArray(item.content) ? item.content : []).filter(part => part?.type === 'output_text' && typeof part.text === 'string').map(part => part.text).join('\n').trim();
 }
+function logGuideFailure(category, upstreamStatus = '', reason = '') {
+  const safeCategories = new Set(['network', 'upstream_http', 'upstream_json', 'incomplete', 'missing_output', 'output_json', 'guide_turn_validation']);
+  const safeReasons = new Set(['message', 'brief_ready', 'brief_intent']);
+  const status = Number.isInteger(upstreamStatus) ? ` upstream_status=${upstreamStatus}` : '';
+  const detail = safeReasons.has(reason) ? ` reason=${reason}` : '';
+  console.error(`LPX_GUIDE_FAILURE endpoint=guide stage=guide category=${safeCategories.has(category) ? category : 'guide_turn_validation'}${status}${detail}`);
+}
 function getGuideResponse(output) {
   const value = getOutputText(output);
-  try {
-    const response = JSON.parse(value);
-    if (!response || typeof response.message !== 'string' || !response.message.trim() || typeof response.brief_ready !== 'boolean') return null;
-    return { message: response.message.trim(), briefReady: response.brief_ready };
-  } catch { return null; }
+  if (!value) return { category: 'missing_output' };
+  let response;
+  try { response = JSON.parse(value); } catch { return { category: 'output_json' }; }
+  if (!response || typeof response.message !== 'string' || !response.message.trim()) return { category: 'guide_turn_validation', reason: 'message' };
+  if (typeof response.brief_ready !== 'boolean') return { category: 'guide_turn_validation', reason: 'brief_ready' };
+  if (!['none', 'approve', 'continue', 'decline'].includes(response.brief_intent)) return { category: 'guide_turn_validation', reason: 'brief_intent' };
+  return { response: { message: response.message.trim(), briefReady: response.brief_ready, briefIntent: response.brief_intent } };
 }
 
 export async function onRequest(context) {
@@ -83,6 +92,8 @@ export async function onRequest(context) {
   if (!basics || typeof basics !== 'object') return json({ error: 'The Guide needs the Basics before the conversation can begin.' }, 400);
   const required = ['identity', 'name', 'music', 'record', 'stage'];
   for (const key of required) if (!text(basics[key], MAX_BASIC_CHARS)) return json({ error: 'Please complete the essential Basics before starting the conversation.' }, 400);
+  const briefReadyContext = data.briefReady === undefined ? false : data.briefReady;
+  if (typeof briefReadyContext !== 'boolean') return json({ error: 'The Guide could not read the current Brief state. Please try again.' }, 400);
   const messages = data.messages;
   if (!Array.isArray(messages)) return json({ error: 'The Guide could not read the conversation history. Please try again.' }, 400);
   const history = [];
@@ -117,20 +128,37 @@ export async function onRequest(context) {
     ] });
   }
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45000);
+  let timedOut = false;
+  const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 45000);
   let upstream;
   try {
-    upstream = await fetch('https://api.openai.com/v1/responses', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.env.LPX_OPENAI_PRODUCTION_KEY}` }, body: JSON.stringify({ model: 'gpt-5.6-terra', store: false, reasoning: { effort: 'medium' }, max_output_tokens: 900, text: { format: { type: 'json_schema', name: 'lpx_guide_turn', strict: true, schema: GUIDE_RESPONSE_SCHEMA } }, instructions: `${GUIDE_INSTRUCTIONS}\n\nReturn only the response object required by the response schema. Put the complete natural, musician-facing reply in message. Set brief_ready to true only when discovery, artist approval, and the necessary targeted refinements are complete and you are ready for the application to generate the Creative Brief. When brief_ready is true, say naturally that the brief is ready, but do not write any part of the Creative Brief in this response. Otherwise set brief_ready to false.\n\n${basicsContext}${sourceContext ? `\n\nOptional source material for this active session:\n${sourceContext}` : ''}${audioContext ? `\n\nAudio-derived listening observations for this active session. This is provider-neutral working evidence, not artist canon. The artist remains authoritative over meaning. Timestamps are approximate. Use it naturally if relevant; never name a provider, expose a schema, or present interpretations as fact.\n${audioContext}` : ''}`, input }) });
-  } catch { return json({ error: 'The Guide took too long to respond. Please try again.' }, 504); }
-  finally { clearTimeout(timeout); }
+    upstream = await fetch('https://api.openai.com/v1/responses', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.env.LPX_OPENAI_PRODUCTION_KEY}` }, body: JSON.stringify({ model: 'gpt-5.6-terra', store: false, reasoning: { effort: 'medium' }, max_output_tokens: 900, text: { format: { type: 'json_schema', name: 'lpx_guide_turn', strict: true, schema: GUIDE_RESPONSE_SCHEMA } }, instructions: `${GUIDE_INSTRUCTIONS}
+
+Return only the response object required by the response schema. Put the complete natural, musician-facing reply in message. Set brief_ready to true only when discovery, artist approval, and the necessary targeted refinements are complete and you are ready for the application to generate the Creative Brief. When brief_ready is true, say naturally that the brief is ready, but do not write any part of the Creative Brief in this response. Otherwise set brief_ready to false. The application currently has a pending Creative Brief only when pending_brief_ready is true. In that context, classify the artist’s latest turn as brief_intent: approve when they affirmatively authorize generation, continue when they ask a substantive question, revise direction, add information, or otherwise want the conversation to continue, and decline when they clearly postpone or reject generation. When pending_brief_ready is false, set brief_intent to none. Structured brief_intent controls the application; your prose must not contradict it. If brief_intent is approve, do not add another conversational request for confirmation or write the brief inline.
+
+Pending Brief Ready state: ${briefReadyContext ? 'true' : 'false'}
+
+${basicsContext}${sourceContext ? `
+
+Optional source material for this active session:
+${sourceContext}` : ''}${audioContext ? `
+
+Audio-derived listening observations for this active session. This is provider-neutral working evidence, not artist canon. The artist remains authoritative over meaning. Timestamps are approximate. Use it naturally if relevant; never name a provider, expose a schema, or present interpretations as fact.
+${audioContext}` : ''}`, input }) });
+  } catch {
+    logGuideFailure('network');
+    return json({ error: timedOut ? 'The Guide took too long to respond. Please try again.' : 'The Guide could not respond just now. Please try again.' }, timedOut ? 504 : 502);
+  } finally { clearTimeout(timeout); }
   if (!upstream.ok) {
+    logGuideFailure('upstream_http', upstream.status);
     if (upstream.status === 429) return json({ error: 'The Guide is receiving a lot of attention right now. Please wait a moment and retry.' }, 429);
     if (upstream.status === 401 || upstream.status === 403) return json({ error: 'The Guide is not configured correctly yet. Please try again later.' }, 503);
     return json({ error: 'The Guide could not respond just now. Please try again.' }, 502);
   }
   let response;
-  try { response = await upstream.json(); } catch { return json({ error: 'The Guide returned an unreadable response. Please retry.' }, 502); }
-  const guideResponse = getGuideResponse(response.output);
-  if (!guideResponse) return json({ error: 'The Guide did not return a usable response. Please retry.' }, 502);
-  return json(guideResponse);
+  try { response = await upstream.json(); } catch { logGuideFailure('upstream_json', upstream.status); return json({ error: 'The Guide returned an unreadable response. Please retry.' }, 502); }
+  if (response?.status === 'incomplete') { logGuideFailure('incomplete', upstream.status); return json({ error: 'The Guide did not return a usable response. Please retry.' }, 502); }
+  const result = getGuideResponse(response?.output);
+  if (!result.response) { logGuideFailure(result.category, upstream.status, result.reason); return json({ error: 'The Guide did not return a usable response. Please retry.' }, 502); }
+  return json(result.response);
 }

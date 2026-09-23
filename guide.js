@@ -38,7 +38,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   const lyricsFile = document.querySelector('#lyrics-file');
   const fileStatus = document.querySelector('#file-status');
   const clearLyricsButton = document.querySelector('#clear-lyrics');
-  const state = { basics: null, source: null, messages: [], pendingImages: [], audioTracks: [], pending: false, brief: null, briefReady: false, briefPending: false, canonLocked: false };
+  const state = { basics: null, source: null, messages: [], pendingImages: [], audioTracks: [], pending: false, brief: null, briefReady: false, briefPending: false, canonLocked: false, guideRequestToken: 0 };
   const SOURCE_LIMITS = { track_list: 20000, lyrics: 100000, other_material: 50000 };
   const MAX_LOCAL_FILE_BYTES = 25 * 1024 * 1024;
   const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -88,7 +88,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   function isVisionMoment(text) {
     return text.replace(/\*\*|__/g, '').toLocaleLowerCase().includes(VISION_TRIGGER);
   }
-  function isBriefApproval(text) { return /^(yes|yeah|yep|do it|make it|please do|go ahead|create it|generate it)[.!\s]*$/i.test(text); }
   function addMessage(role, text) {
     const entry = document.createElement('article');
     const vision = role === 'guide' && isVisionMoment(text);
@@ -193,20 +192,31 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     return '';
   }
   async function askGuide() {
+    const requestToken = ++state.guideRequestToken;
+    let approveBrief = false;
     hideError();
     setBusy(true);
     try {
       const listeningRecords = state.audioTracks.filter(track => track.status === 'HEARD' && track.record).map(track => track.record);
-      const response = await fetch('/api/guide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ basics: state.basics, source: state.source, messages: state.messages, images: state.pendingImages, listeningRecords }) });
+      const response = await fetch('/api/guide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ basics: state.basics, source: state.source, messages: state.messages, images: state.pendingImages, listeningRecords, briefReady: state.briefReady }) });
       const payload = await response.json().catch(() => null);
+      if (requestToken !== state.guideRequestToken) return;
       if (!response.ok || !payload?.message) throw new Error(payload?.error || 'The Guide could not respond just now. Please try again.');
-      state.messages.push({ role: 'assistant', text: payload.message });
-      addMessage('guide', payload.message);
-      state.briefReady = payload.briefReady === true;
-      state.pendingImages = [];
+      approveBrief = state.briefReady && payload.briefIntent === 'approve';
+      if (approveBrief) {
+        state.pendingImages = [];
+      } else {
+        state.messages.push({ role: 'assistant', text: payload.message });
+        addMessage('guide', payload.message);
+        state.briefReady = payload.briefReady === true;
+        state.pendingImages = [];
+      }
     } catch (error) {
-      showError(error.message || 'The Guide could not respond just now. Please try again.');
-    } finally { setBusy(false); }
+      if (requestToken === state.guideRequestToken) showError(error.message || 'The Guide could not respond just now. Please try again.');
+    } finally {
+      if (requestToken === state.guideRequestToken) setBusy(false);
+    }
+    if (approveBrief && requestToken === state.guideRequestToken) await generateCreativeBrief();
   }
   basicsForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -324,17 +334,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     if (file && error) { imageStatus.textContent = error; return; }
     try {
       if (state.brief && !state.canonLocked) { state.brief = null; briefArtifact.hidden = true; }
-      const generateBrief = text && state.briefReady && isBriefApproval(text);
       if (text) {
         state.messages.push({ role: 'user', text });
         addMessage('artist', text);
-      }
-      if (generateBrief) {
-        messageInput.value = '';
-        if (file) { imageInput.value = ''; imageNote.value = ''; imageStatus.textContent = 'Image not added. Preparing your approved Creative Brief.'; }
-        if (hasWaitingAudio) { audioStatus.textContent = 'Queued recordings not added. Preparing your approved Creative Brief.'; }
-        await generateCreativeBrief();
-        return;
       }
       if (file) {
         imageStatus.textContent = 'Preparing image…';
@@ -348,7 +350,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
       imageNote.value = '';
       messageInput.value = '';
       imageStatus.textContent = file ? 'Image added. The Guide is looking at it now.' : 'JPEG, PNG, or WebP · up to 4 MB';
-      if (generateBrief) { await generateCreativeBrief(); } else { await askGuide(); }
+      await askGuide();
     } catch (issue) { imageStatus.textContent = issue.message || 'That image could not be added. Please try another file.'; }
   });
   function showBriefError(message) { briefError.querySelector('p').textContent = message; briefError.hidden = false; }
@@ -376,7 +378,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     try {
       const plan = (await briefRequest('plan')).plan;
       const sections = [];
-      for (const section of plan.sections) sections.push((await briefRequest('section', { section })).section);
+      for (const [sectionIndex, section] of plan.sections.entries()) sections.push((await briefRequest('section', { section, sectionIndex })).section);
       if (sections.length !== plan.sections.length || new Set(sections.map(section => section.id)).size !== plan.sections.length) throw new Error('The Creative Brief was incomplete. Please retry.');
       state.brief = { title: plan.title, ledger: plan.ledger || [], sections: plan.sections.map(section => ({ ...section, markdown: sections.find(item => item.id === section.id).markdown })) };
       state.canonLocked = false;
@@ -475,6 +477,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   downloadConversationButton.addEventListener('click', downloadConversation);
   startOverButton.addEventListener('click', () => {
     if (!window.confirm('Start over? This clears this browser-only Guide conversation.')) return;
-    state.basics = null; state.source = null; state.messages = []; state.pendingImages = []; state.audioTracks = []; state.brief = null; state.briefReady = false; state.canonLocked = false; messages.replaceChildren(); briefContent.replaceChildren(); renderAudioQueue(); briefArtifact.hidden = true; briefError.hidden = true; updateExportAvailability(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); messageForm.reset(); imageStatus.textContent = 'JPEG, PNG, or WebP · up to 4 MB'; audioStatus.textContent = 'MP3 · up to 25 MB each'; fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
+    state.guideRequestToken += 1; state.basics = null; state.source = null; state.messages = []; state.pendingImages = []; state.audioTracks = []; state.brief = null; state.briefReady = false; state.canonLocked = false; messages.replaceChildren(); briefContent.replaceChildren(); renderAudioQueue(); briefArtifact.hidden = true; briefError.hidden = true; updateExportAvailability(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); messageForm.reset(); imageStatus.textContent = 'JPEG, PNG, or WebP · up to 4 MB'; audioStatus.textContent = 'MP3 · up to 25 MB each'; fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
   });
 })();
