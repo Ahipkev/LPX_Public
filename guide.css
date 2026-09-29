@@ -81,6 +81,11 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--gold); ou
 .image-preview { display: block; width: min(100%, 240px); max-height: 240px; margin: 0 0 12px auto; border: 1px solid rgba(203,171,102,.55); object-fit: contain; background: rgba(0,0,0,.34); }
 .image-name { margin: 0; color: var(--copy); font: 500 10px/1.5 "Montserrat", sans-serif; letter-spacing: .11em; overflow-wrap: anywhere; }
 .image-context { margin-top: 12px !important; color: var(--copy); }
+.image-queue { display: grid; gap: 10px; margin-top: 12px; padding: 12px; border-left: 1px solid rgba(203,171,102,.55); background: rgba(0,0,0,.2); }
+.image-queue-item { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.image-queue-item img { width: 54px; height: 54px; border: 1px solid rgba(203,171,102,.45); object-fit: cover; background: rgba(0,0,0,.34); }
+.image-queue-item p { margin: 0; color: var(--copy); font: 500 10px/1.5 "Montserrat", sans-serif; letter-spacing: .08em; overflow-wrap: anywhere; }
+.image-queue-item .text-button { min-height: 32px; margin: 0; }
 .message-form { padding-top: 28px; border-top: 1px solid var(--line); }
 .message-form > label { display: block; }
 .message-form textarea { min-height: 116px; }

@@ -1,9 +1,9 @@
 const MAX_MESSAGE_CHARS = 5000;
-const MAX_REQUEST_CHARS = 6000000;
+const MAX_REQUEST_CHARS = 70000000;
 const MAX_BASIC_CHARS = 2000;
 const SOURCE_LIMITS = { track_list: 20000, lyrics: 100000, other_material: 50000 };
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
-const MAX_IMAGES_PER_REQUEST = 1;
+const MAX_IMAGES_PER_REQUEST = 12;
 const MAX_LISTENING_RECORDS = 24;
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const GUIDE_RESPONSE_SCHEMA = {
@@ -31,7 +31,7 @@ Before presenting a Vision, pass an internal Synthesis Gate. The Vision Moment i
 
 Do not force materially different songs into cosmetic variations of one concept merely to preserve album-wide cohesion. If a proposed environment or concept changes only in lighting, color, objects, animation, decoration, emphasis, or intensity, ask whether those variations genuinely express what differs between the songs. Sometimes they do; sometimes they reveal an imposed global concept. Distinguish the two before resolving the album structure.
 
-The named experience vocabulary can be useful internally as possibilities, never as templates or a required choice. Multiple modes may combine. If optional source material is supplied, quietly read it as working context so you can listen more and interrogate less. Do not dump a summary, list themes, announce an analysis, or turn the material into a report. Use it to notice details, relationships, contradictions, and questions the material has not already answered. Visual source material exists so the Guide can look more and make the artist describe less. Carefully inspect supplied images, connect them to the record context, and respect the artist’s stated role for an image as authoritative. Remember useful visual details through the conversation and use visual evidence in Synthesis. Do not respond with an exhaustive image report, a reaction, praise, art criticism, assumptions about an image’s role, or a new questionnaire. A sequence of pages may be source material for a graphic novel or another companion work; do not force it into sync with music. With track names and lyrics, notice possible sequencing, emotional movement, recurring imagery whose meaning changes, shifts in perspective, or opening/closing relationships only as hypotheses. Treat labels such as verse, chorus, bridge, intro, outro, hook, refrain, and pre-chorus as structural metadata, never motifs. Ignore those labels when interpreting language and never treat their recurrence as meaningful. Do not use crude word-frequency analysis as creative understanding.
+The named experience vocabulary can be useful internally as possibilities, never as templates or a required choice. Multiple modes may combine. If optional source material is supplied, quietly read it as working context so you can listen more and interrogate less. Do not dump a summary, list themes, announce an analysis, or turn the material into a report. Use it to notice details, relationships, contradictions, and questions the material has not already answered. Visual source material exists so the Guide can look more and make the artist describe less. Carefully inspect supplied images, connect them to the record context, and respect the artist’s stated role for an image as authoritative. When images arrive as a collection, inspect the whole set before responding: retain each image’s identity, notice relationships where the record context supports them, and avoid a mechanical image-by-image interview. Remember useful visual details through the conversation and use visual evidence in Synthesis. Do not respond with an exhaustive image report, a reaction, praise, art criticism, assumptions about an image’s role, or a new questionnaire. A sequence of pages may be source material for a graphic novel or another companion work; do not force it into sync with music. With track names and lyrics, notice possible sequencing, emotional movement, recurring imagery whose meaning changes, shifts in perspective, or opening/closing relationships only as hypotheses. Treat labels such as verse, chorus, bridge, intro, outro, hook, refrain, and pre-chorus as structural metadata, never motifs. Ignore those labels when interpreting language and never treat their recurrence as meaningful. Do not use crude word-frequency analysis as creative understanding.
 
 Do not pitch an LPX vision early. Only after enough real context exists, granularity has been resolved, and the Synthesis Gate has been passed may you say “I think I know what this record wants to be.” This is an earned Vision Moment, not a turn-count milestone. Before saying it, be able to answer internally: what is true of the record as a whole; what each significant song wants or needs; whether the LPX is unified, track-specific, or hybrid and why; which plausible alternative was weaker and why; whether cosmetic variation is forcing different songs into one concept; whether the treatment serves the music; and how the listener experiences it. Describe a specific treatment the artist can picture: how the listener enters; what happens while the music plays; how words, artwork, and source material participate; how the experience changes; where restraint matters; how it ends; and whether the album wants one unified treatment or track-specific treatments. Then ask “What feels right?” and “What feels wrong?” If rejected, return to curiosity and do not defend it.
 
@@ -109,7 +109,7 @@ export async function onRequest(context) {
     sourceMaterial[key] = result.value;
   }
   const images = data.images === undefined ? [] : data.images;
-  if (!Array.isArray(images) || images.length > MAX_IMAGES_PER_REQUEST) return json({ error: 'Add one JPEG, PNG, or WebP image at a time.' }, 400);
+  if (!Array.isArray(images) || images.length > MAX_IMAGES_PER_REQUEST) return json({ error: `Add up to ${MAX_IMAGES_PER_REQUEST} JPEG, PNG, or WebP images at a time.` }, 400);
   const visualSources = images.map(imageDataUrl);
   if (visualSources.some(image => !image)) return json({ error: 'That image could not be accepted. Use a JPEG, PNG, or WebP image under 4 MB.' }, 400);
   const suppliedRecords = data.listeningRecords === undefined ? (data.listeningRecord === undefined || data.listeningRecord === null ? [] : [data.listeningRecord]) : data.listeningRecords;
@@ -121,10 +121,11 @@ export async function onRequest(context) {
   const basicsContext = `Artist Basics (already known; do not repeat these back as a list):\nWhat they are: ${basics.identity.trim()}\nName: ${basics.name.trim()}\nMusic: ${basics.music.trim()}\nPeople involved: ${(text(basics.people, MAX_BASIC_CHARS) || 'Not provided')}\nRoles: ${(text(basics.roles, MAX_BASIC_CHARS) || 'Not provided')}\nRecord: ${basics.record.trim()}\nRecord status: ${basics.stage.trim()}`;
   const sourceContext = Object.entries(sourceMaterial).filter(([, value]) => value).map(([key, value]) => `--- ${key === 'track_list' ? 'Track list' : key === 'other_material' ? 'Other written material' : 'Lyrics'} ---\n${value}`).join('\n\n');
   const input = history.length ? history : [{ role: 'user', content: `${basicsContext}\n\nBegin the real conversation.` }];
-  for (const image of visualSources) {
+  if (visualSources.length) {
+    const batchContext = visualSources.map((image, index) => `${index + 1}. “${image.name}”${image.note ? ` — stated batch context: ${image.note}` : ' — no role or context was stated; do not assume one.'}`).join('\n');
     input.push({ role: 'user', content: [
-      { type: 'input_text', text: `The artist has added a visual source titled “${image.name}.”${image.note ? ` Their stated context: ${image.note}` : ' No role or context was stated; do not assume one.'} Look at it as working record context. Let it inform the conversation without turning this reply into an image report.` },
-      { type: 'input_image', image_url: image.dataUrl, detail: 'auto' }
+      { type: 'input_text', text: `The artist has added an ordered collection of ${visualSources.length} visual source${visualSources.length === 1 ? '' : 's'}. Inspect the whole collection before responding. Each image remains separate evidence; filenames and stated context are clues, not authority or Canon. Compare the collection where useful, use established record context intelligently, and do not turn this reply into an image-by-image report or metadata questionnaire.\n\n${batchContext}` },
+      ...visualSources.flatMap(image => [{ type: 'input_image', image_url: image.dataUrl, detail: 'auto' }])
     ] });
   }
   const controller = new AbortController();
