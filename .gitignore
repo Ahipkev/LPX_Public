@@ -31,3 +31,6 @@ node_modules/
 .wrangler/
 __pycache__/
 *.py[cod]
+
+# Private development fixture artifacts
+dev/transmission-artifacts.local.js

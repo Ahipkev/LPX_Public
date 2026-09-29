@@ -52,6 +52,21 @@ function imageDataUrl(value) {
   if (bytes <= 0 || bytes > MAX_IMAGE_BYTES) return null;
   return { name: value.name.trim(), type: value.type, note: value.note.trim(), dataUrl: value.dataUrl };
 }
+function completedProjectBrief(value) {
+  if (!value || typeof value !== 'object' || !text(value.title, 200) || !Array.isArray(value.sections) || !value.sections.length || value.sections.length > 18 || !Array.isArray(value.ledger) || value.ledger.length > 60) return null;
+  const sections = value.sections.map(section => section && typeof section === 'object' && /^[a-z0-9-]{1,60}$/.test(section.id || '') && text(section.title, 200) && text(section.markdown, 12000) ? { id: section.id, title: section.title.trim(), markdown: section.markdown.trim() } : null);
+  if (sections.some(section => !section)) return null;
+  const ledger = value.ledger.map(entry => entry && typeof entry === 'object' && text(entry.status, 80) && text(entry.subject, 300) && text(entry.detail, 1500) ? {
+    status: entry.status.trim(),
+    subject: entry.subject.trim(),
+    detail: entry.detail.trim(),
+    establishes: Array.isArray(entry.establishes) ? entry.establishes.filter(item => text(item, 300)).slice(0, 12).map(item => item.trim()) : [],
+    does_not_require: Array.isArray(entry.does_not_require) ? entry.does_not_require.filter(item => text(item, 300)).slice(0, 12).map(item => item.trim()) : []
+  } : null);
+  if (ledger.some(entry => !entry)) return null;
+  const serialized = JSON.stringify({ title: value.title.trim(), sections, ledger });
+  return serialized.length <= 250000 ? serialized : null;
+}
 function listeningRecord(value) {
   if (!value || typeof value !== 'object' || value.schema !== 'lpx-listening-record/0.1' || !value.source || typeof value.source !== 'object' || typeof value.source.display_name !== 'string' || !/^[a-f0-9]{64}$/i.test(value.source.content_hash || '') || !Array.isArray(value.timeline) || !Array.isArray(value.observations) || !Array.isArray(value.interpretations) || !Array.isArray(value.uncertainties)) return null;
   if (value.timeline.length < 3 || value.timeline.length > 30 || value.observations.length > 20 || value.interpretations.length > 16 || value.uncertainties.length > 16) return null;
@@ -108,6 +123,14 @@ export async function onRequest(context) {
     if (!result.valid) return json({ error: `${key === 'track_list' ? 'Track list' : key === 'other_material' ? 'Other material' : 'Lyrics'} is too large for this prototype. Please reduce it and try again.` }, 413);
     sourceMaterial[key] = result.value;
   }
+  const project = data.project === undefined || data.project === null ? null : data.project;
+  let projectBriefContext = '';
+  if (project !== null) {
+    if (!project || typeof project !== 'object' || typeof project.canonical !== 'boolean') return json({ error: 'The completed project artifact could not be read. Please try again.' }, 400);
+    const brief = completedProjectBrief(project.brief);
+    if (!brief) return json({ error: 'The completed project artifact could not be read. Please try again.' }, 400);
+    projectBriefContext = `Completed LPX Creative Brief (${project.canonical ? 'Canonical' : 'Exploration'}):\n${brief}`;
+  }
   const images = data.images === undefined ? [] : data.images;
   if (!Array.isArray(images) || images.length > MAX_IMAGES_PER_REQUEST) return json({ error: `Add up to ${MAX_IMAGES_PER_REQUEST} JPEG, PNG, or WebP images at a time.` }, 400);
   const visualSources = images.map(imageDataUrl);
@@ -142,7 +165,10 @@ Pending Brief Ready state: ${briefReadyContext ? 'true' : 'false'}
 ${basicsContext}${sourceContext ? `
 
 Optional source material for this active session:
-${sourceContext}` : ''}${audioContext ? `
+${sourceContext}` : ''}${projectBriefContext ? `
+
+Portable completed project artifact for this active session. Treat its approved direction as current working authority. Do not ask the artist to reconstruct the history that produced it. Continue from it, preserve unknowns, and invite correction where the artist wants to revise it.
+${projectBriefContext}` : ''}${audioContext ? `
 
 Audio-derived listening observations for this active session. This is provider-neutral working evidence, not artist canon. The artist remains authoritative over meaning. Timestamps are approximate. Use it naturally if relevant; never name a provider, expose a schema, or present interpretations as fact.
 ${audioContext}` : ''}`, input }) });

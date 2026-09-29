@@ -1,4 +1,5 @@
 import * as pdfjsLib from './vendor/pdfjs/pdf.mjs';
+import { isTransmissionFixtureRequest, loadTransmissionFixture } from './dev/transmission-fixture.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs', import.meta.url).toString();
 
@@ -39,7 +40,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   const lyricsFile = document.querySelector('#lyrics-file');
   const fileStatus = document.querySelector('#file-status');
   const clearLyricsButton = document.querySelector('#clear-lyrics');
-  const state = { basics: null, source: null, messages: [], visualSources: [], pendingImages: [], audioTracks: [], pending: false, brief: null, briefReady: false, briefPending: false, canonLocked: false, guideRequestToken: 0 };
+  const state = { basics: null, source: null, messages: [], visualSources: [], pendingImages: [], audioTracks: [], fixture: null, pending: false, brief: null, briefReady: false, briefPending: false, canonLocked: false, guideRequestToken: 0 };
   const SOURCE_LIMITS = { track_list: 20000, lyrics: 100000, other_material: 50000 };
   const MAX_LOCAL_FILE_BYTES = 25 * 1024 * 1024;
   const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -51,7 +52,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   function clean(value) { return value.trim(); }
   function setBusy(busy) {
     state.pending = busy;
-    const canWrite = !busy && state.messages.length > 0;
+    const canWrite = !busy && (state.messages.length > 0 || state.fixture);
     messageInput.disabled = !canWrite;
     sendButton.disabled = !canWrite;
     imageInput.disabled = !canWrite;
@@ -214,7 +215,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
     setBusy(true);
     try {
       const listeningRecords = state.audioTracks.filter(track => track.status === 'HEARD' && track.record).map(track => track.record);
-      const response = await fetch('/api/guide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ basics: state.basics, source: state.source, messages: state.messages, images: state.visualSources, listeningRecords, briefReady: state.briefReady }) });
+      const project = state.brief ? { brief: state.brief, canonical: state.canonLocked } : null;
+      const response = await fetch('/api/guide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ basics: state.basics, source: state.source, messages: state.messages, images: state.visualSources, listeningRecords, project, briefReady: state.briefReady }) });
       const payload = await response.json().catch(() => null);
       if (requestToken !== state.guideRequestToken) return;
       if (!response.ok || !payload?.message) throw new Error(payload?.error || 'The Guide could not respond just now. Please try again.');
@@ -529,8 +531,28 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs'
   });
   retryButton.addEventListener('click', askGuide);
   downloadConversationButton.addEventListener('click', downloadConversation);
+  async function loadDevelopmentFixture() {
+    if (isTransmissionFixtureRequest(window.location)) {
+      try { await import('./dev/transmission-artifacts.local.js'); } catch {}
+    }
+    const fixture = loadTransmissionFixture(window.location, window.__LPX_DEV_TRANSMISSION_ARTIFACTS__);
+    if (!fixture) return;
+    state.fixture = fixture;
+    state.basics = fixture.basics;
+    state.source = fixture.source;
+    state.visualSources = fixture.visualSources;
+    state.audioTracks = fixture.audioTracks;
+    state.brief = fixture.brief;
+    state.canonLocked = fixture.canonLocked;
+    basicsStage.hidden = true;
+    conversationStage.hidden = false;
+    if (state.brief) renderBrief(state.brief);
+    window.__LPX_DEV_FIXTURE_STATUS__ = { id: fixture.id, missing: fixture.missing, masterAudioReferences: fixture.masterAudio.length };
+    setBusy(false);
+  }
   startOverButton.addEventListener('click', () => {
     if (!window.confirm('Start over? This clears this browser-only Guide conversation.')) return;
-    state.guideRequestToken += 1; state.basics = null; state.source = null; state.messages = []; state.visualSources = []; state.pendingImages = []; state.audioTracks = []; state.brief = null; state.briefReady = false; state.canonLocked = false; messages.replaceChildren(); briefContent.replaceChildren(); renderImageQueue(); renderAudioQueue(); briefArtifact.hidden = true; briefError.hidden = true; updateExportAvailability(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); messageForm.reset(); imageStatus.textContent = 'JPEG, PNG, or WebP · up to 4 MB each'; audioStatus.textContent = 'MP3 · up to 25 MB each'; fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
+    state.guideRequestToken += 1; state.basics = null; state.source = null; state.messages = []; state.visualSources = []; state.pendingImages = []; state.audioTracks = []; state.fixture = null; state.brief = null; state.briefReady = false; state.canonLocked = false; messages.replaceChildren(); briefContent.replaceChildren(); renderImageQueue(); renderAudioQueue(); briefArtifact.hidden = true; briefError.hidden = true; updateExportAvailability(); hideError(); conversationStage.hidden = true; basicsStage.hidden = false; basicsForm.reset(); messageForm.reset(); imageStatus.textContent = 'JPEG, PNG, or WebP · up to 4 MB each'; audioStatus.textContent = 'MP3 · up to 25 MB each'; fileStatus.textContent = 'Files append into Lyrics for review. Nothing is uploaded as a file.'; basicsForm.querySelector('[name="identity"]').focus();
   });
+  void loadDevelopmentFixture();
 })();
