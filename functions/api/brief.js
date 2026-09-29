@@ -2,6 +2,18 @@ const MAX_REQUEST_CHARS = 6000000;
 const MAX_MESSAGE_CHARS = 5000;
 const MAX_SECTIONS = 18;
 
+const BRIEF_EDITORIAL_INSTRUCTIONS = `You create a faithful, portable LPX Creative Brief from an approved creative conversation. Do not restart discovery, change approved decisions, expose process, or depend on access to this conversation after delivery. Return only valid JSON matching the requested shape.
+
+The Creative Brief is the final organized production specification, not a transcript, summary, or chronology of creative reasoning. Write the result being made. Do not narrate what was discussed, what the artist later clarified, what you initially considered, or why every decision was reached. Include rationale only when it materially protects an important approved decision.
+
+Organize each Brief so a capable collaborator can understand the experience before implementation detail: establish a concise creative north star; separate album-wide rules from what is unique to individual tracks; and avoid restating global rules inside every track. Where the approved experience has meaningful listener progression, document its actual states clearly; do not invent state machinery. Normalize comparable track production plans where useful while preserving genuinely different rooms in the same album house.
+
+Consolidate only the non-negotiable Canon whose reinterpretation would materially change the approved LPX. Keep artist-approved or locked direction distinct from required implementation consequences, optional directions, and unresolved unknowns. Never promote an unapproved Guide proposal to Canon, weaken approved direction into a suggestion, retain a rejected idea, or invent missing facts.
+
+Distinguish artist/source materials from production-derived work. Do not imply that the artist must provide technical timing, mappings, companion artwork, interface state, or other production data unless they explicitly have it; identify production-derived deliverables only when the approved LPX requires them. Keep the Brief provider-neutral and free of instructions tied to Father, OpenAI, AHiP, a specific image generator, or a specific coding tool unless the artist explicitly requires one.
+
+Before completing the requested output, perform an internal editorial synthesis: remove duplicated rules, resolve contradictions between global and track material, apply later approved decisions over earlier proposals, and ensure production responsibility is assigned to the correct party. Where appropriate, end the finished Brief with a concise final experience statement that gives a producer a creative test for the completed LPX.`;
+
 function json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=UTF-8', 'Cache-Control': 'no-store' } }); }
 function outputText(output) { return Array.isArray(output) ? output.flatMap(item => item?.type === 'message' && Array.isArray(item.content) ? item.content : []).filter(item => item?.type === 'output_text').map(item => item.text || '').join('').trim() : ''; }
 function clean(value, limit) { return typeof value === 'string' && value.trim() && value.length <= limit ? value.trim() : null; }
@@ -51,7 +63,7 @@ function briefErrorFor(stage, category) {
 async function ask(context, prompt, maxOutputTokens, diagnostic) {
   let response;
   try {
-    response = await fetch('https://api.openai.com/v1/responses', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.env.LPX_OPENAI_PRODUCTION_KEY}` }, body: JSON.stringify({ model: 'gpt-5.6-terra', store: false, reasoning: { effort: 'medium' }, max_output_tokens: maxOutputTokens, instructions: 'You create a faithful LPX Creative Brief from an approved conversation. Do not restart discovery, change approved decisions, or expose process. Return only valid JSON matching the requested shape.', input: prompt }) });
+    response = await fetch('https://api.openai.com/v1/responses', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${context.env.LPX_OPENAI_PRODUCTION_KEY}` }, body: JSON.stringify({ model: 'gpt-5.6-terra', store: false, reasoning: { effort: 'medium' }, max_output_tokens: maxOutputTokens, instructions: BRIEF_EDITORIAL_INSTRUCTIONS, input: prompt }) });
   } catch {
     logBriefFailure(diagnostic.stage, 'network', '', diagnostic.sectionIndex);
     throw new Error(briefErrorFor(diagnostic.stage, 'network'));
