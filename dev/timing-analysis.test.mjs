@@ -77,6 +77,45 @@ test('rejects duplicate event ids and changed or reordered artist lyric phrases'
   assert.equal(validateProductionTiming(reordered, source), null);
 });
 
+test('rejects a later known lyric phrase that jumps implausibly backward in the supplied order', () => {
+  const spacemanSource = {
+    ...source,
+    duration_ms: 270000,
+    lyric_phrases: lyricPhrases('Opening line\nIt\'s true. It\'s you.\nSecond line\nIt\'s true. It\'s you.\nFourth-minute line\nIt\'s true. It\'s you.\nClosing line')
+  };
+  const malformed = response();
+  const starts = [5000, 45000, 90000, 150000, 230000, 24100, 252000];
+  malformed.lyric_phrases = spacemanSource.lyric_phrases.map((phrase, index) => ({
+    id: phrase.id,
+    text: phrase.text,
+    timing_state: 'known',
+    start_ms: starts[index],
+    end_ms: index === 5 ? 249200 : starts[index] + 3500,
+    confidence: 'medium',
+    note: ''
+  }));
+  assert.equal(validateProductionTiming(malformed, spacemanSource), null);
+});
+
+test('accepts normal chronological phrases, unknown structural markers, and valid later repeated lyrics', () => {
+  const phraseSource = {
+    ...source,
+    lyric_phrases: lyricPhrases('Intro\nIt\'s true. It\'s you.\nVerse line\nIt\'s true. It\'s you.\nOutro')
+  };
+  const chronological = response();
+  chronological.lyric_phrases = phraseSource.lyric_phrases.map((phrase, index) => {
+    if (index === 0 || index === 4) {
+      return { id: phrase.id, text: phrase.text, timing_state: 'unknown', start_ms: null, end_ms: null, confidence: 'low', note: 'Structural source marker or unperformed text.' };
+    }
+    const starts = [null, 30000, 80000, 145000, null];
+    return { id: phrase.id, text: phrase.text, timing_state: 'known', start_ms: starts[index], end_ms: starts[index] + 3500, confidence: 'medium', note: '' };
+  });
+  const result = validateProductionTiming(chronological, phraseSource);
+  assert.ok(result);
+  assert.equal(result.lyric_timing_map.phrases[0].timing_state, 'unknown');
+  assert.equal(result.lyric_timing_map.phrases[3].text, "It's true. It's you.");
+});
+
 test('keeps the Gemini structured schema separate from LPX provenance and carries no visual-cue fields', () => {
   assert.equal(TIMING_RESPONSE_SCHEMA.properties.events.items.properties.start_ms.type[0], 'integer');
   assert.equal(TIMING_RESPONSE_SCHEMA.properties.lyric_phrases.items.properties.text.type, 'string');

@@ -1,6 +1,9 @@
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const MAX_LYRIC_CHARS = 16000;
 const MAX_LYRIC_PHRASES = 160;
+// Ordered lyric phrases can overlap in a performance, so this permits a
+// generous overlap while rejecting a later phrase that jumps far backward.
+const MAX_LYRIC_START_REGRESSION_MS = 30000;
 const AUDIO_TYPE = 'audio/mpeg';
 const EVENT_MAP_SCHEMA = 'lpx-audio-event-map/0.2';
 const LYRIC_MAP_SCHEMA = 'lpx-lyric-timing-map/0.2';
@@ -183,7 +186,14 @@ function validatePhrases(phrases, sourcePhrases, durationMs) {
     if (!phrase || phrase.id !== source.id || phrase.text !== source.text || !TIMING_STATES.includes(phrase.timing_state) || !validNullableInteger(phrase.start_ms) || !validNullableInteger(phrase.end_ms) || !CONFIDENCE.includes(phrase.confidence) || typeof phrase.note !== 'string' || phrase.note.length > 600 || !validKnownTiming(phrase, durationMs)) return null;
     return { id: source.id, text: source.text, timing_state: phrase.timing_state, start_ms: phrase.start_ms, end_ms: phrase.end_ms, confidence: phrase.confidence, provenance: 'model_observed', precision: phrase.timing_state === 'known' ? 'approximate' : 'unknown', note: phrase.note.trim() };
   });
-  return sanitized.some(phrase => !phrase) ? null : sanitized;
+  if (sanitized.some(phrase => !phrase)) return null;
+  let lastKnownStart = null;
+  for (const phrase of sanitized) {
+    if (phrase.timing_state === 'unknown') continue;
+    if (lastKnownStart !== null && phrase.start_ms + MAX_LYRIC_START_REGRESSION_MS < lastKnownStart) return null;
+    lastKnownStart = phrase.start_ms;
+  }
+  return sanitized;
 }
 
 export function validateProductionTiming(value, source) {

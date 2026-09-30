@@ -34,3 +34,4 @@ __pycache__/
 
 # Private development fixture artifacts
 dev/transmission-artifacts.local.js
+dev/spaceman-lyrics.local.txt

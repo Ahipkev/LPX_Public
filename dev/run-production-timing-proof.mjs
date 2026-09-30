@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { loadKnownLyrics } from './production-timing-proof-lyrics.js';
 
 function argument(name) {
   const index = process.argv.indexOf(name);
@@ -8,17 +9,8 @@ function argument(name) {
 }
 
 function usage() {
-  console.error('Usage: node dev/run-production-timing-proof.mjs --track "Track title" --audio "C:\\path\\master.mp3" --output "C:\\path\\timing-result.json" [--duration-ms 123456] [--endpoint https://longplay-experience.pages.dev/api/timing]');
+  console.error('Usage: node dev/run-production-timing-proof.mjs --track "Track title" --audio "C:\\path\\master.mp3" --output "C:\\path\\timing-result.json" [--lyrics-file "C:\\path\\lyrics.txt"] [--duration-ms 123456] [--endpoint https://longplay-experience.pages.dev/api/timing]');
   process.exitCode = 1;
-}
-
-function lyricsForTrack(allLyrics, track) {
-  const heading = `## ${track}`;
-  const start = allLyrics.indexOf(heading);
-  if (start < 0) return '';
-  const contentStart = start + heading.length;
-  const next = allLyrics.indexOf('\n## ', contentStart);
-  return allLyrics.slice(contentStart, next < 0 ? allLyrics.length : next).trim();
 }
 
 const track = argument('--track');
@@ -27,15 +19,18 @@ const outputPath = argument('--output');
 const endpoint = argument('--endpoint') || 'https://longplay-experience.pages.dev/api/timing';
 const durationArgument = argument('--duration-ms');
 const durationMs = durationArgument ? Number(durationArgument) : null;
+const lyricsFile = argument('--lyrics-file');
 
 if (!track || !audioPath || !outputPath || (durationArgument && (!Number.isInteger(durationMs) || durationMs <= 0))) {
   usage();
 } else {
-  globalThis.window = {};
-  await import('./transmission-artifacts.local.js');
-  const fixture = window.__LPX_DEV_TRANSMISSION_ARTIFACTS__;
-  const lyrics = lyricsForTrack(fixture?.source?.lyrics || '', track);
-  if (!lyrics) throw new Error(`No artist-supplied lyrics found for “${track}” in the local Transmission fixture.`);
+  let fixtureLyrics = '';
+  if (!lyricsFile) {
+    globalThis.window = {};
+    await import('./transmission-artifacts.local.js');
+    fixtureLyrics = window.__LPX_DEV_TRANSMISSION_ARTIFACTS__?.source?.lyrics || '';
+  }
+  const lyrics = await loadKnownLyrics({ lyricsFile, track, fixtureLyrics });
   const bytes = await readFile(resolve(audioPath));
   const contentHash = createHash('sha256').update(bytes).digest('hex');
   const dataUrl = `data:audio/mpeg;base64,${bytes.toString('base64')}`;
