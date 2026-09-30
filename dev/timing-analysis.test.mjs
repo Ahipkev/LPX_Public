@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { TIMING_RESPONSE_SCHEMA, lyricPhrases, onRequest, validateProductionTiming } from '../functions/api/timing.js';
+import { TIMING_PROMPT, TIMING_RESPONSE_SCHEMA, lyricPhrases, onRequest, validateProductionTiming } from '../functions/api/timing.js';
 
 const lyrics = 'First supplied line\nSecond supplied line\n[Chorus]\nThird supplied line';
 const source = {
@@ -15,22 +15,23 @@ const source = {
 function response() {
   return {
     events: [
-      { id: 'event-beginning', kind: 'audio_beginning', timing_state: 'known', start_ms: 0, end_ms: null, tolerance_ms: 1000, confidence: 'high', description: 'Audio begins.' },
-      { id: 'event-riff', kind: 'riff_change', timing_state: 'known', start_ms: 30000, end_ms: null, tolerance_ms: 1500, confidence: 'medium', description: 'Main riff changes.' },
-      { id: 'event-vocal', kind: 'vocal_entrance', timing_state: 'known', start_ms: 60000, end_ms: 76000, tolerance_ms: 2000, confidence: 'medium', description: 'Lead vocal enters.' },
-      { id: 'event-ending', kind: 'ending', timing_state: 'known', start_ms: 220000, end_ms: 240000, tolerance_ms: 1500, confidence: 'high', description: 'The recording ends.' },
-      { id: 'event-unknown', kind: 'other', timing_state: 'unknown', start_ms: null, end_ms: null, tolerance_ms: null, confidence: 'low', description: 'A possible detail could not be located reliably.' },
-      { id: 'event-impact', kind: 'impact', timing_state: 'known', start_ms: 120000, end_ms: null, tolerance_ms: 1200, confidence: 'high', description: 'A distinct impact occurs.' },
-      { id: 'event-outro', kind: 'outro', timing_state: 'known', start_ms: 200000, end_ms: null, tolerance_ms: 1500, confidence: 'medium', description: 'The outro begins.' }
+      { id: 'event-beginning', kind: 'audio_beginning', timing_state: 'known', start_ms: 0, end_ms: null, confidence: 'high', observable: 'Audio begins.', interpretation: '' },
+      { id: 'event-motif', kind: 'motif_appearance', timing_state: 'known', start_ms: 30000, end_ms: null, confidence: 'medium', observable: 'A recurring motif becomes audible in a thin electronic texture.', interpretation: '' },
+      { id: 'event-vocal', kind: 'vocal_entrance', timing_state: 'known', start_ms: 60000, end_ms: 76000, confidence: 'medium', observable: 'Lead vocal enters over the established arrangement.', interpretation: '' },
+      { id: 'event-ending', kind: 'ending', timing_state: 'known', start_ms: 220000, end_ms: 240000, confidence: 'high', observable: 'The recording ends.', interpretation: '' },
+      { id: 'event-unknown', kind: 'other', timing_state: 'unknown', start_ms: null, end_ms: null, confidence: 'low', observable: 'A possible detail could not be located reliably.', interpretation: '' },
+      { id: 'event-impact', kind: 'impact', timing_state: 'known', start_ms: 120000, end_ms: null, confidence: 'high', observable: 'A distinct low-frequency impact occurs.', interpretation: '' },
+      { id: 'event-outro', kind: 'outro', timing_state: 'known', start_ms: 200000, end_ms: null, confidence: 'medium', observable: 'The arrangement thins into its closing passage.', interpretation: '' }
     ],
-    lyric_phrases: source.lyric_phrases.map((phrase, index) => ({ id: phrase.id, text: phrase.text, timing_state: index === 1 ? 'unknown' : 'known', start_ms: index === 1 ? null : 50000 + index * 10000, end_ms: index === 1 ? null : 56000 + index * 10000, tolerance_ms: index === 1 ? null : 2000, confidence: 'medium', note: '' }))
+    lyric_phrases: source.lyric_phrases.map((phrase, index) => ({ id: phrase.id, text: phrase.text, timing_state: index === 1 ? 'unknown' : 'known', start_ms: index === 1 ? null : 50000 + index * 10000, end_ms: index === 1 ? null : 56000 + index * 10000, confidence: 'medium', note: '' }))
   };
 }
 
 test('accepts a valid provider-neutral sibling artifact pair without a fixed ten-event requirement', () => {
   const result = validateProductionTiming(response(), source);
-  assert.equal(result.audio_event_map.schema, 'lpx-audio-event-map/0.1');
-  assert.equal(result.lyric_timing_map.schema, 'lpx-lyric-timing-map/0.1');
+  assert.equal(result.audio_event_map.schema, 'lpx-audio-event-map/0.2');
+  assert.equal(result.lyric_timing_map.schema, 'lpx-lyric-timing-map/0.2');
+  assert.equal(result.audio_event_map.analysis.analysis_version, '0.2');
   assert.equal(result.audio_event_map.events.length, 7);
   assert.equal(result.lyric_timing_map.phrases[1].timing_state, 'unknown');
   assert.equal(result.lyric_timing_map.phrases[1].start_ms, null);
@@ -40,6 +41,15 @@ test('accepts a valid provider-neutral sibling artifact pair without a fixed ten
 test('rejects fabricated numeric timing for an unknown item', () => {
   const invalid = response();
   invalid.events[4].start_ms = 110000;
+  assert.equal(validateProductionTiming(invalid, source), null);
+});
+
+test('requires an observable event description while leaving an uncertain conventional interpretation empty', () => {
+  const valid = validateProductionTiming(response(), source);
+  assert.equal(valid.audio_event_map.events[1].observable.includes('electronic texture'), true);
+  assert.equal(valid.audio_event_map.events[1].interpretation, '');
+  const invalid = response();
+  invalid.events[1].observable = '';
   assert.equal(validateProductionTiming(invalid, source), null);
 });
 
@@ -71,6 +81,14 @@ test('keeps the Gemini structured schema separate from LPX provenance and carrie
   assert.equal(TIMING_RESPONSE_SCHEMA.properties.events.items.properties.start_ms.type[0], 'integer');
   assert.equal(TIMING_RESPONSE_SCHEMA.properties.lyric_phrases.items.properties.text.type, 'string');
   assert.equal(JSON.stringify(TIMING_RESPONSE_SCHEMA).includes('visual'), false);
+  assert.equal(JSON.stringify(TIMING_RESPONSE_SCHEMA).includes('tolerance_ms'), false);
+});
+
+test('prompt prioritizes observable evidence, separate meaningful motif appearances, and no fixed event count', () => {
+  assert.match(TIMING_PROMPT, /direct observable audible evidence/i);
+  assert.match(TIMING_PROMPT, /preserve both meaningful appearances as separate events/i);
+  assert.match(TIMING_PROMPT, /Do not target a fixed count/i);
+  assert.match(TIMING_PROMPT, /not a visual-production plan/i);
 });
 
 test('uses the Files API once, sends bytes rather than base64 for upload, returns sibling maps, and cleans up', async () => {

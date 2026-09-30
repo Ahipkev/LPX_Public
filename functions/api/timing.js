@@ -2,13 +2,13 @@ const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const MAX_LYRIC_CHARS = 16000;
 const MAX_LYRIC_PHRASES = 160;
 const AUDIO_TYPE = 'audio/mpeg';
-const EVENT_MAP_SCHEMA = 'lpx-audio-event-map/0.1';
-const LYRIC_MAP_SCHEMA = 'lpx-lyric-timing-map/0.1';
+const EVENT_MAP_SCHEMA = 'lpx-audio-event-map/0.2';
+const LYRIC_MAP_SCHEMA = 'lpx-lyric-timing-map/0.2';
 const ANALYSIS_TYPE = 'production-timing';
-const ANALYSIS_VERSION = '0.1';
+const ANALYSIS_VERSION = '0.2';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com';
 const GEMINI_MODEL = 'gemini-3.8-flash';
-const EVENT_KINDS = ['audio_beginning', 'musical_entrance', 'instrumental_entrance', 'vocal_entrance', 'spoken_passage', 'riff_change', 'structural_transition', 'breakdown', 'impact', 'energy_change', 'silence', 'climax', 'outro', 'ending', 'other'];
+const EVENT_KINDS = ['audio_beginning', 'musical_entrance', 'instrumental_entrance', 'vocal_entrance', 'spoken_passage', 'motif_appearance', 'texture_change', 'density_change', 'rhythm_change', 'structural_transition', 'breakdown', 'impact', 'silence', 'climax', 'outro', 'ending', 'other'];
 const TIMING_STATES = ['known', 'unknown'];
 const CONFIDENCE = ['high', 'medium', 'low'];
 
@@ -27,11 +27,11 @@ export const TIMING_RESPONSE_SCHEMA = {
           timing_state: { type: 'string', enum: TIMING_STATES },
           start_ms: { type: ['integer', 'null'] },
           end_ms: { type: ['integer', 'null'] },
-          tolerance_ms: { type: ['integer', 'null'] },
           confidence: { type: 'string', enum: CONFIDENCE },
-          description: { type: 'string' }
+          observable: { type: 'string' },
+          interpretation: { type: 'string' }
         },
-        required: ['id', 'kind', 'timing_state', 'start_ms', 'end_ms', 'tolerance_ms', 'confidence', 'description']
+        required: ['id', 'kind', 'timing_state', 'start_ms', 'end_ms', 'confidence', 'observable', 'interpretation']
       }
     },
     lyric_phrases: {
@@ -44,22 +44,23 @@ export const TIMING_RESPONSE_SCHEMA = {
           timing_state: { type: 'string', enum: TIMING_STATES },
           start_ms: { type: ['integer', 'null'] },
           end_ms: { type: ['integer', 'null'] },
-          tolerance_ms: { type: ['integer', 'null'] },
           confidence: { type: 'string', enum: CONFIDENCE },
           note: { type: 'string' }
         },
-        required: ['id', 'text', 'timing_state', 'start_ms', 'end_ms', 'tolerance_ms', 'confidence', 'note']
+        required: ['id', 'text', 'timing_state', 'start_ms', 'end_ms', 'confidence', 'note']
       }
     }
   },
   required: ['events', 'lyric_phrases']
 };
 
-const TIMING_PROMPT = `Perform LPX Production Timing Analysis on the actual supplied MP3 and the authoritative artist-supplied lyric phrases below. Return JSON only, matching the required schema.
+export const TIMING_PROMPT = `Perform LPX Production Timing Analysis on the actual supplied MP3 and the authoritative artist-supplied lyric phrases below. Return JSON only, matching the required schema.
 
 This is timing evidence, not a visual-production plan. Listen to the audio. Do not decide what an LPX should display.
 
-For events: identify as many meaningful, production-useful audible events as the recording establishes. Do not target a fixed count. Use only event kinds supplied by the schema. Every timing point produced from this listening pass is approximate model-observed evidence, never measured or sample-accurate. Set timing_state to "known" only when the audio grounds a location. For known timing, use integer milliseconds with a realistic nonzero tolerance_ms. For unknown timing, set start_ms, end_ms, and tolerance_ms to null. Never derive a time from lyrics, track duration, expected structure, or plausible intervals.
+For events: first state direct observable audible evidence in observable: what changes, enters, drops away, returns, becomes denser, becomes sparse, or otherwise becomes audible. Only then use interpretation for an optional conservative musical classification; leave interpretation empty when a conventional label is not clearly supported. Do not call something a verse, chorus, breakdown, guitar solo, or riff merely because it is plausible. If a motif first appears in one texture or instrumentation and later returns in a substantially fuller or different arrangement, preserve both meaningful appearances as separate events. Identify as many meaningful, production-useful audible events as the recording establishes. Do not target a fixed count. Use only event kinds supplied by the schema, choosing a broad neutral kind when classification is uncertain.
+
+Every timing point produced from this listening pass is approximate model-observed evidence, never measured or sample-accurate. Numeric milliseconds are storage values, not a claim of clock precision. Set timing_state to "known" only when the audio grounds a location. For unknown timing, set start_ms and end_ms to null. Never derive a time from lyrics, track duration, expected structure, or plausible intervals.
 
 For lyric_phrases: return every supplied phrase exactly once, in the supplied order, with the exact supplied id and text. Locate it only where the actual performance supports the alignment. Do not rewrite, correct, omit, merge, split, or reorder lyrics. For an unlocatable phrase, set timing_state to "unknown" and all timing values to null. A note may state a brief audio-versus-source mismatch, but must not alter the artist-supplied text. Do not interpolate unknown timings.
 
@@ -157,8 +158,8 @@ export function lyricPhrases(value) {
 function validId(value, prefix) { return typeof value === 'string' && new RegExp(`^${prefix}-[a-z0-9-]{1,56}$`).test(value); }
 function validNullableInteger(value) { return value === null || (Number.isInteger(value) && value >= 0); }
 function validKnownTiming(value, durationMs) {
-  if (value.timing_state === 'unknown') return value.start_ms === null && value.end_ms === null && value.tolerance_ms === null;
-  if (value.timing_state !== 'known' || !Number.isInteger(value.start_ms) || !Number.isInteger(value.tolerance_ms) || value.tolerance_ms <= 0) return false;
+  if (value.timing_state === 'unknown') return value.start_ms === null && value.end_ms === null;
+  if (value.timing_state !== 'known' || !Number.isInteger(value.start_ms)) return false;
   if (value.end_ms !== null && (!Number.isInteger(value.end_ms) || value.end_ms < value.start_ms)) return false;
   const finalTime = value.end_ms === null ? value.start_ms : value.end_ms;
   return durationMs === null || finalTime <= durationMs + 2000;
@@ -168,9 +169,9 @@ function validateEvents(events, durationMs) {
   if (!Array.isArray(events) || events.length < 4 || events.length > 80) return null;
   const ids = new Set();
   const sanitized = events.map(event => {
-    if (!event || !validId(event.id, 'event') || ids.has(event.id) || !EVENT_KINDS.includes(event.kind) || !TIMING_STATES.includes(event.timing_state) || !validNullableInteger(event.start_ms) || !validNullableInteger(event.end_ms) || !validNullableInteger(event.tolerance_ms) || !CONFIDENCE.includes(event.confidence) || !clean(event.description, 600) || !validKnownTiming(event, durationMs)) return null;
+    if (!event || !validId(event.id, 'event') || ids.has(event.id) || !EVENT_KINDS.includes(event.kind) || !TIMING_STATES.includes(event.timing_state) || !validNullableInteger(event.start_ms) || !validNullableInteger(event.end_ms) || !CONFIDENCE.includes(event.confidence) || !clean(event.observable, 600) || typeof event.interpretation !== 'string' || event.interpretation.length > 400 || !validKnownTiming(event, durationMs)) return null;
     ids.add(event.id);
-    return { id: event.id, kind: event.kind, timing_state: event.timing_state, start_ms: event.start_ms, end_ms: event.end_ms, tolerance_ms: event.tolerance_ms, confidence: event.confidence, provenance: 'model_observed', precision: event.timing_state === 'known' ? 'approximate' : 'unknown', description: event.description.trim() };
+    return { id: event.id, kind: event.kind, timing_state: event.timing_state, start_ms: event.start_ms, end_ms: event.end_ms, confidence: event.confidence, provenance: 'model_observed', precision: event.timing_state === 'known' ? 'approximate' : 'unknown', observable: event.observable.trim(), interpretation: event.interpretation.trim() };
   });
   return sanitized.some(event => !event) || !sanitized.some(event => event.timing_state === 'known') ? null : sanitized;
 }
@@ -179,8 +180,8 @@ function validatePhrases(phrases, sourcePhrases, durationMs) {
   if (!Array.isArray(phrases) || phrases.length !== sourcePhrases.length) return null;
   const sanitized = phrases.map((phrase, index) => {
     const source = sourcePhrases[index];
-    if (!phrase || phrase.id !== source.id || phrase.text !== source.text || !TIMING_STATES.includes(phrase.timing_state) || !validNullableInteger(phrase.start_ms) || !validNullableInteger(phrase.end_ms) || !validNullableInteger(phrase.tolerance_ms) || !CONFIDENCE.includes(phrase.confidence) || typeof phrase.note !== 'string' || phrase.note.length > 600 || !validKnownTiming(phrase, durationMs)) return null;
-    return { id: source.id, text: source.text, timing_state: phrase.timing_state, start_ms: phrase.start_ms, end_ms: phrase.end_ms, tolerance_ms: phrase.tolerance_ms, confidence: phrase.confidence, provenance: 'model_observed', precision: phrase.timing_state === 'known' ? 'approximate' : 'unknown', note: phrase.note.trim() };
+    if (!phrase || phrase.id !== source.id || phrase.text !== source.text || !TIMING_STATES.includes(phrase.timing_state) || !validNullableInteger(phrase.start_ms) || !validNullableInteger(phrase.end_ms) || !CONFIDENCE.includes(phrase.confidence) || typeof phrase.note !== 'string' || phrase.note.length > 600 || !validKnownTiming(phrase, durationMs)) return null;
+    return { id: source.id, text: source.text, timing_state: phrase.timing_state, start_ms: phrase.start_ms, end_ms: phrase.end_ms, confidence: phrase.confidence, provenance: 'model_observed', precision: phrase.timing_state === 'known' ? 'approximate' : 'unknown', note: phrase.note.trim() };
   });
   return sanitized.some(phrase => !phrase) ? null : sanitized;
 }
